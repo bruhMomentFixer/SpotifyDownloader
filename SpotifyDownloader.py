@@ -243,40 +243,56 @@ def get_expected_filename(url, output_path, spotdl_args=None):
     except:
         pass
     
-    # Si no se puede obtener info, buscar cualquier archivo mp3 reciente
+    # Si no se puede obtener info, no devolver un nombre de archivo existente
+    # ya que podría ser de una canción anterior
     return None
 
-def verify_download_completion(output_path, expected_filename=None):
+def verify_download_completion(output_path, expected_filename=None, url=None):
     """Verifica que la descarga se completó correctamente y el archivo existe"""
     # Esperar un poco para que el sistema de archivos se actualice
     time.sleep(2)
     
+    # Obtener lista de archivos antes de la descarga para comparar después
+    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+    
     # Buscar todos los archivos MP3 en la carpeta
-    mp3_files = list(output_path.glob("*.mp3"))
+    mp3_files = list(output_path.glob("*.mp3")) if output_path.exists() else []
     
     if not mp3_files:
         print("❌ VERIFICACIÓN: No se encontraron archivos MP3 después de la descarga")
         return False
+    
+    # Encontrar archivos nuevos (creados después de empezar la descarga)
+    new_files = set(mp3_files) - existing_files
     
     # Si tenemos un nombre esperado, buscar ese archivo específicamente
     if expected_filename:
         for mp3_file in mp3_files:
             if mp3_file.name == expected_filename:
                 file_size = mp3_file.stat().st_size / (1024 * 1024)
-                if file_size > 0.1:  # Archivo debe tener al menos 100KB
-                    print(f"✅ VERIFICACIÓN: Archivo encontrado - {mp3_file.name} ({file_size:.2f} MB)")
+                if file_size > 0.1:
+                    print(f"✅ VERIFICACIÓN: Archivo esperado encontrado - {mp3_file.name} ({file_size:.2f} MB)")
                     return True
         
         print(f"❌ VERIFICACIÓN: No se encontró el archivo esperado '{expected_filename}'")
         print(f"   Archivos encontrados: {[f.name for f in mp3_files]}")
         return False
     
-    # Si no tenemos nombre esperado, verificar que al menos un archivo tenga tamaño decente
-    for mp3_file in mp3_files:
-        file_size = mp3_file.stat().st_size / (1024 * 1024)
-        if file_size > 0.1:  # Archivo debe tener al menos 100KB
-            print(f"✅ VERIFICACIÓN: Archivo encontrado - {mp3_file.name} ({file_size:.2f} MB)")
+    # Si no tenemos nombre esperado, buscar entre los archivos nuevos
+    if new_files:
+        # Tomar el archivo más reciente de los nuevos
+        latest_new_file = max(new_files, key=lambda x: x.stat().st_mtime)
+        file_size = latest_new_file.stat().st_size / (1024 * 1024)
+        if file_size > 0.1:
+            print(f"✅ VERIFICACIÓN: Nuevo archivo encontrado - {latest_new_file.name} ({file_size:.2f} MB)")
             return True
+    
+    # Si no hay archivos nuevos, verificar el más reciente en general
+    latest_file = max(mp3_files, key=lambda x: x.stat().st_mtime)
+    file_size = latest_file.stat().st_size / (1024 * 1024)
+    if file_size > 0.1:
+        print(f"✅ VERIFICACIÓN: Archivo más reciente - {latest_file.name} ({file_size:.2f} MB)")
+        return True
     
     print("❌ VERIFICACIÓN: Los archivos MP3 encontrados son demasiado pequeños o están corruptos")
     print(f"   Archivos: {[f.name for f in mp3_files]}")
@@ -536,6 +552,7 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
     expected_filename = get_expected_filename(url, output_path, spotdl_args)
     if expected_filename:
         print(f"📁 Archivo esperado: {expected_filename}")
+    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
     
     for attempt in range(max_retries):
         try:
@@ -556,7 +573,7 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
             
             if result.returncode == 0:
                 # VERIFICAR que el archivo realmente se creó
-                if verify_download_completion(output_path, expected_filename):
+                if verify_download_completion(output_path, expected_filename, existing_files):
                     print("✅ Descarga exitosa con SpotDL y verificación completada")
                     return True
                 else:
