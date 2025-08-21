@@ -697,10 +697,11 @@ def download_multiple_songs(spotdl_args=None):
     if not urls:
         return False
     
-    output_dir = Path("downloads")
+    # Obtener carpeta de descarga única
+    output_dir = get_unique_download_folder()
     output_dir.mkdir(exist_ok=True)
     
-    # Verificar archivos existentes antes de empezar
+    # Verificar archivos existentes antes de empezar (debería estar vacía)
     existing_files_before = set(output_dir.glob("*.mp3"))
     
     stats = {
@@ -710,7 +711,7 @@ def download_multiple_songs(spotdl_args=None):
         'failed_urls': []
     }
     
-    print(f"\n🎵 Iniciando descarga de {stats['total']} canciones")
+    print(f"\n🎵 Iniciando descarga de {stats['total']} canciones en la carpeta: {output_dir}")
     print("=" * 60)
     
     for i, url in enumerate(urls, 1):
@@ -751,7 +752,7 @@ def download_multiple_songs(spotdl_args=None):
     # Verificar que los archivos existen
     mp3_files = list(output_dir.glob("*.mp3"))
     if not mp3_files:
-        print(f"\n❌ ERROR: No se encontraron archivos MP3 en la carpeta 'downloads'")
+        print(f"\n❌ ERROR: No se encontraron archivos MP3 en la carpeta '{output_dir}'")
         print("💡 Verifica los permisos de la carpeta y tu conexión a internet")
         return False
     
@@ -774,10 +775,12 @@ def download_single_song():
         print("❌ URL inválida.")
         return
     
-    output_dir = Path("downloads")
+    # Obtener carpeta de descarga única
+    output_dir = get_unique_download_folder()
     output_dir.mkdir(exist_ok=True)
     
     print(f"\n📥 Descargando: {normalized_url}")
+    print(f"📁 Carpeta de destino: {output_dir}")
     print("-" * 50)
     
     success = download_song_with_detailed_errors(normalized_url, output_dir, spotdl_args)
@@ -794,6 +797,27 @@ def download_single_song():
             print("💡 Revisa los permisos de la carpeta 'downloads'")
     else:
         print("\n💥 La descarga falló")
+
+def get_unique_download_folder(base_name="downloads"):
+    """Obtiene un nombre único para la carpeta de descargas"""
+    folder = Path(base_name)
+    counter = 0
+    # Si la carpeta base no existe, la usamos
+    if not folder.exists():
+        return folder
+    
+    # Si la carpeta base existe pero está vacía, la usamos
+    if not any(folder.iterdir()):
+        return folder
+    
+    # Buscar una carpeta que no exista o esté vacía
+    while True:
+        new_folder = Path(f"{base_name}{counter}")
+        if not new_folder.exists():
+            return new_folder
+        if not any(new_folder.iterdir()):
+            return new_folder
+        counter += 1
 
 def create_credentials_file():
     """Crea archivo de credenciales de ejemplo"""
