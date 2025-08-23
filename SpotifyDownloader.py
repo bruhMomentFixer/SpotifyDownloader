@@ -272,8 +272,13 @@ def verify_download_completion(output_path, expected_filename=None, existing_fil
             if mp3_file.name == expected_filename:
                 file_size = mp3_file.stat().st_size / (1024 * 1024)
                 if file_size > 0.1:
-                    print(f"✅ VERIFICACIÓN: Archivo esperado encontrado - {mp3_file.name} ({file_size:.2f} MB)")
-                    return True
+                    # VERIFICAR CRÍTICAMENTE que el archivo es NUEVO, no preexistente
+                    if mp3_file in new_files:
+                        print(f"✅ VERIFICACIÓN: Archivo esperado encontrado - {mp3_file.name} ({file_size:.2f} MB)")
+                        return True
+                    else:
+                        print(f"⚠️  VERIFICACIÓN: Archivo esperado encontrado pero NO ES NUEVO - {mp3_file.name} ({file_size:.2f} MB)")
+                        return False
         
         print(f"❌ VERIFICACIÓN: No se encontró el archivo esperado '{expected_filename}'")
         print(f"   Archivos encontrados: {[f.name for f in current_files]}")
@@ -287,12 +292,16 @@ def verify_download_completion(output_path, expected_filename=None, existing_fil
         if file_size > 0.1:
             print(f"✅ VERIFICACIÓN: Nuevo archivo encontrado - {latest_new_file.name} ({file_size:.2f} MB)")
             return True
+        else:
+            print(f"❌ VERIFICACIÓN: Nuevo archivo encontrado pero demasiado pequeño - {latest_new_file.name} ({file_size:.2f} MB)")
+            return False
     
     # Si no hay archivos nuevos, verificar el más reciente en general
     latest_file = max(current_files, key=lambda x: x.stat().st_mtime)
     file_size = latest_file.stat().st_size / (1024 * 1024)
     if file_size > 0.1:
-        print(f"✅ VERIFICACIÓN: Archivo más reciente - {latest_file.name} ({file_size:.2f} MB)")
+        print(f"⚠️  VERIFICACIÓN: No hay archivos nuevos, usando el más reciente - {latest_file.name} ({file_size:.2f} MB)")
+        # Añadir verificación adicional para asegurar que es el archivo correcto
         return True
     
     print("❌ VERIFICACIÓN: Los archivos MP3 encontrados son demasiado pequeños o están corruptos")
@@ -556,11 +565,16 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
     
     # Obtener archivos existentes antes de empezar
     existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+    initial_file_count = len(existing_files)
     
     for attempt in range(max_retries):
         try:
             print(f"⏳ Ejecutando SpotDL (intento {attempt + 1}/{max_retries})...")
             
+            # Obtener archivos existentes ANTES de cada intento
+            existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+            initial_count = len(existing_files)
+
             cmd = [
                 "spotdl", "download", url,
                 "--output", str(output_path / "{artist} - {title}.{output-ext}"),
@@ -575,22 +589,37 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             
             if result.returncode == 0:
-                # VERIFICAR que el archivo realmente se creó
-                if verify_download_completion(output_path, expected_filename, existing_files):
-                    print("✅ Descarga exitosa con SpotDL y verificación completada")
-                    return True
-                else:
-                    print("⚠️ SpotDL reportó éxito pero no se encontró el archivo, reintentando...")
-                    # Limpiar archivos corruptos/pequeños
-                    for mp3_file in output_path.glob("*.mp3"):
-                        if mp3_file.stat().st_size < 100 * 1024:  # Menos de 100KB
-                            mp3_file.unlink()
-                            print(f"🗑️ Eliminado archivo corrupto: {mp3_file.name}")
+                # Esperar un poco para que el sistema de archivos se actualice
+                time.sleep(3)
+                
+                # Verificar que se haya creado exactamente un archivo nuevo
+                current_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+                new_files = current_files - existing_files
+                current_count = len(current_files)
+                
+                print(f"📊 Archivos antes: {initial_count}, después: {current_count}, nuevos: {len(new_files)}")
+                
+                # Verificación robusta: debe haber exactamente un archivo nuevo
+                if len(new_files) == 1:
+                    new_file = next(iter(new_files))
+                    file_size = new_file.stat().st_size / (1024 * 1024)  # MB
                     
-                    if attempt < max_retries - 1:
-                        print(f"🔄 Reintentando en {retry_delay} segundos...")
-                        time.sleep(retry_delay)
-                    continue
+                    if file_size > 0.1:  # Archivo válido (> 100KB)
+                        print(f"✅ VERIFICACIÓN: Nuevo archivo válido - {new_file.name} ({file_size:.2f} MB)")
+                        return True
+                    else:
+                        print(f"❌ VERIFICACIÓN: Archivo demasiado pequeño - {new_file.name} ({file_size:.2f} MB)")
+                        # Eliminar archivo corrupto
+                        try:
+                            new_file.unlink()
+                        except:
+                            pass
+                else:
+                    print(f"❌ VERIFICACIÓN: Se encontraron {len(new_files)} archivos nuevos, se esperaba 1")
+                    
+                # Si la verificación falla, continuar con el reintento
+                print("⚠️ SpotDL reportó éxito pero la verificación falló, reintentando...")
+                
             else:
                 # Mostrar el error completo solo en el último intento
                 if attempt == max_retries - 1:
@@ -604,8 +633,9 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
                 else:
                     error_summary = extract_spotdl_error(result.stderr)
                     print(f"⚠️ Intento {attempt + 1} fallado: {error_summary}")
-                    print(f"🔄 Reintentando en {retry_delay} segundos...")
-                    time.sleep(retry_delay)
+                    
+                print(f"🔄 Reintentando en {retry_delay} segundos...")
+                time.sleep(retry_delay)
                     
         except subprocess.TimeoutExpired:
             if attempt == max_retries - 1:
@@ -624,16 +654,26 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
     
     # Si todos los intentos con SpotDL fallan, intentar con yt-dlp
     print("🔄 Todos los intentos con SpotDL fallaron, probando con yt-dlp...")
+    
+    # Obtener archivos existentes antes de intentar con yt-dlp
+    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
     yt_dlp_success = download_with_yt_dlp(url, output_path, spotdl_args)
     
     if yt_dlp_success:
         # Verificar también la descarga de yt-dlp
-        if verify_download_completion(output_path, expected_filename, existing_files):
-            print("✅ Descarga exitosa con yt-dlp y verificación completada")
-            return True
-        else:
-            print("❌ yt-dlp reportó éxito pero no se encontró el archivo")
-            return False
+        time.sleep(3)
+        current_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+        new_files = current_files - existing_files
+        
+        if len(new_files) >= 1:
+            new_file = next(iter(new_files))
+            file_size = new_file.stat().st_size / (1024 * 1024)
+            if file_size > 0.1:
+                print(f"✅ VERIFICACIÓN: Descarga exitosa con yt-dlp - {new_file.name} ({file_size:.2f} MB)")
+                return True
+        
+        print("❌ yt-dlp reportó éxito pero no se encontró el archivo válido")
+        return False
     
     return False
 
