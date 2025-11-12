@@ -738,11 +738,16 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
                 print(f"✅ Archivo renombrado a: {safe_name}")
             except Exception as e:
                 print(f"⚠️ No se pudo renombrar el archivo: {e}")
+                new_path = latest_file  # usar el nombre original si no se pudo renombrar
 
+            # 🔸 Agregar a la lista de fallback ANTES de retornar
             if fallback_list is not None:
                 fallback_list.append(clean_query)
+                print(f"📋 Añadida a la lista de verificación manual: {clean_query}")
+
             print(f"✅ Descarga alternativa exitosa: {clean_query}")
             return True
+
 
     print("❌ Falló incluso con yt-dlp")
     return False
@@ -928,81 +933,56 @@ def read_songs_from_file(file_path):
         return None
 
 def download_multiple_songs(spotdl_args=None):
-    """Descarga múltiples canciones desde un archivo"""
-    songs_file = Path("songs-to-download.txt")
-    
-    print(f"📖 Leyendo canciones desde: {songs_file}")
-    urls = read_songs_from_file(songs_file)
-    
-    if not urls:
-        return False
-    
-    # Obtener carpeta de descarga única
-    output_dir = get_unique_download_folder()
-    output_dir.mkdir(exist_ok=True)
-    
-    # Verificar archivos existentes antes de empezar (debería estar vacía)
-    existing_files_before = set(output_dir.glob("*.mp3"))
-    
-    stats = {
-        'total': len(urls),
-        'success': 0,
-        'failed': 0,
-        'failed_urls': []
-    }
-    
-    print(f"\n🎵 Iniciando descarga de {stats['total']} canciones en la carpeta: {output_dir}")
-    print("=" * 60)
-    
-    for i, url in enumerate(urls, 1):
-        print(f"\n📥 [{i}/{stats['total']}]")
-        print("-" * 50)
-        
-        # Obtener archivos existentes antes de cada descarga
-        existing_files = set(output_dir.glob("*.mp3"))
-        
-        fallback_downloads = []
-        success = download_song_with_detailed_errors(url, output_dir, spotdl_args, fallback_list=fallback_downloads)
-        
-        if success:
-            stats['success'] += 1
-            print(f"✅ Canción {i} descargada con éxito")
-        else:
-            stats['failed'] += 1
-            stats['failed_urls'].append(url)
-            print(f"❌ Error descargando canción {i}")
-    
-    if fallback_downloads:
-        print("\n⚠️ Canciones que se descargaron usando yt-dlp (verifícalas manualmente):")
-        for name in fallback_downloads:
-            print(f"   - {name}")
+    file_path = Path("songs-to-download.txt")
+    if not file_path.exists():
+        print("❌ No se encontró el archivo 'songs-to-download.txt'")
+        return
 
-    # Mostrar resumen
+    output_dir = Path("downloads")
+    output_dir.mkdir(exist_ok=True)
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        urls = [line.strip() for line in f if line.strip()]
+
+    urls = list(dict.fromkeys(urls))
+    print(f"📖 Leyendo canciones desde: {file_path.name}")
+    print(f"✅ Se encontraron {len(urls)} URLs válidas (se omitieron duplicados)\n")
+
+    print(f"🎵 Iniciando descarga de {len(urls)} canciones en la carpeta: {output_dir}")
+    print("=" * 60)
+
+    successful = 0
+    failed = 0
+    fallback_downloads = []  # 🔹 lista global persistente
+
+    for idx, url in enumerate(urls, start=1):
+        print(f"\n📥 [{idx}/{len(urls)}]")
+        print("--------------------------------------------------")
+        try:
+            ok = download_song_with_detailed_errors(url, output_dir, spotdl_args=spotdl_args, fallback_list=fallback_downloads)
+            if ok:
+                successful += 1
+                print(f"✅ Canción {idx} descargada con éxito")
+            else:
+                failed += 1
+                print(f"❌ Canción {idx} falló")
+        except Exception as e:
+            failed += 1
+            print(f"💥 Error en la canción {idx}: {e}")
+
     print("\n" + "=" * 60)
     print("📊 RESUMEN DE DESCARGA")
     print("=" * 60)
-    print(f"• Total de canciones: {stats['total']}")
-    print(f"• Descargas exitosas: {stats['success']}")
-    print(f"• Descargas fallidas: {stats['failed']}")
-    
-    # Verificar archivos descargados
-    final_files = set(output_dir.glob("*.mp3"))
-    new_files = final_files - existing_files_before
-    print(f"• Archivos nuevos descargados: {len(new_files)}")
-    
-    if stats['failed_urls']:
-        print(f"\n❌ URLs fallidas:")
-        for url in stats['failed_urls']:
-            print(f"   → {url}")
-    
-    # Verificar que los archivos existen
-    mp3_files = list(output_dir.glob("*.mp3"))
-    if not mp3_files:
-        print(f"\n❌ ERROR: No se encontraron archivos MP3 en la carpeta '{output_dir}'")
-        print("💡 Verifica los permisos de la carpeta y tu conexión a internet")
-        return False
-    
-    return stats['failed'] == 0
+    print(f"• Total de canciones: {len(urls)}")
+    print(f"• Descargas exitosas: {successful}")
+    print(f"• Descargas fallidas: {failed}")
+    print(f"• Archivos nuevos descargados: {successful}")
+
+    # 🔸 Mostrar lista de canciones descargadas con yt-dlp
+    if fallback_downloads:
+        print("\n⚠️ Canciones descargadas con yt-dlp (verifícalas manualmente):")
+        for name in fallback_downloads:
+            print(f"   - {name}")
 
 def download_single_song():
     """Función principal para descargar una canción individual"""
