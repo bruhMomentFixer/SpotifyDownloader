@@ -1,11 +1,11 @@
 import os
-import subprocess
 import time
 import json
 import logging
 import re
 import sys
 from pathlib import Path
+import subprocess, shlex
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -103,61 +103,165 @@ def get_song_info(spotify_url, spotdl_args=None):
         return None
 
 def download_with_yt_dlp(spotify_url, output_path, spotdl_args=None):
-    """Intenta descargar usando yt-dlp como respaldo"""
+    """
+    Intenta descargar usando yt-dlp cuando SpotDL falla.
+    Usa el nombre real de Spotify para buscar en YouTube y valida la descarga.
+    """
+
+    print("🔄 Intentando con yt-dlp como alternativa...")
+
+    success = False
+    video_url = None
+
+    # Asegurar directorio
+    output_dir = Path(output_path)
+    output_dir.mkdir(exist_ok=True)
+
+    # Inicializar cliente Spotify si no existe
     try:
-        print("🔄 Intentando con yt-dlp como alternativa...")
-        
-        # Obtener información real de la canción
-        search_query = get_song_info(spotify_url, spotdl_args)
-        if not search_query:
-            # Si falla, usar el ID del track como último recurso
-            track_id = spotify_url.split('/track/')[-1].split('?')[0]
-            search_query = f"spotify track {track_id}"
-        
-        print(f"🎵 Buscando en YouTube: {search_query}")
-        
-        # Crear directorio de descargas si no existe
-        output_path.mkdir(exist_ok=True)
-        
-        # Descargar con yt-dlp - mostrar progreso real
-        cmd = [
-            "yt-dlp",
-            f"ytsearch1:{search_query}",  # ytsearch1 para solo el primer resultado
-            "-x", 
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "-o", str(output_path / "%(title)s.%(ext)s"),
-            "--no-playlist",
-            "--no-simulate",  # Forzar descarga real
-            "--newline"  # Mostrar progreso
-        ]
-        
-        print("⬇️ Descargando con yt-dlp...")
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                 universal_newlines=True, bufsize=1)
-        
-        # Mostrar progreso en tiempo real
-        for line in process.stdout:
-            if line.strip():
-                print(f"📦 {line.strip()}")
-        
-        process.wait()
-        
-        if process.returncode == 0:
-            # VERIFICAR que el archivo realmente se creó
-            if verify_download_completion(output_path):
-                print("✅ Descarga exitosa con yt-dlp")
-                return True
-            else:
-                print("❌ yt-dlp reportó éxito pero no se encontraron archivos MP3 válidos")
-                return False
-        else:
-            print("❌ Error en la descarga con yt-dlp")
-            return False
-            
+        import spotipy
+        from spotipy.oauth2 import SpotifyClientCredentials
+        with open("spotify_client_data.txt") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        client_id, client_secret = lines[:2]
+        sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
     except Exception as e:
-        logger.error(f"Error con yt-dlp: {e}")
-        return False
+        print(f"⚠️ No se pudo inicializar cliente Spotify: {e}")
+        sp = None
+
+    # Intentar obtener nombre correcto de la canción
+    clean_query = "unknown track"
+    if sp:
+        try:
+            track_info = sp.track(spotify_url)
+            artist = track_info['artists'][0]['name']
+            title = track_info['name']
+            clean_query = f"{artist} - {title}"
+            print(f"🎯 Nombre obtenido de Spotify: {clean_query}")
+        except Exception as e:
+            print(f"⚠️ No se pudo obtener información de Spotify: {e}")
+
+    # Buscar en YouTube con el nombre real
+    search_query = f"ytsearch5:{clean_query}"
+    print(f"🔍 Buscando en YouTube: {search_query}")
+
+    try:
+        cmd_info = f'yt-dlp --dump-json --flat-playlist "{search_query}"'
+        result = subprocess.run(shlex.split(cmd_info), capture_output=True, text=True)
+        results = [json.loads(line) for line in result.stdout.strip().splitlines() if line.strip()]
+
+        if not results:
+            print("❌ No se encontraron resultados en YouTube.")
+            return False
+
+        # Elegir el primer resultado como más relevante
+        best_match = results[0]
+        video_url = f"https://www.youtube.com/watch?v={best_match['id']}"
+        print(f"🏆 Mejor coincidencia: {best_match['title']}")
+        print(f"🔗 URL seleccionada: {video_url}")
+
+        # Descargar
+        yt_dlp_cmd = [
+            "yt-dlp", "-x", "--audio-format", "mp3",
+            "-o", str(output_dir / "%(title)s.%(ext)s"),
+            video_url
+        ]
+        print("⬇️ Descargando con yt-dlp...")
+        download_proc = subprocess.run(yt_dlp_cmd, capture_output=True, text=True)
+
+        # Verificar resultado
+        if download_proc.returncode == 0:
+            mp3_files = list(output_dir.glob("*.mp3"))
+            if mp3_files:
+                latest_file = max(mp3_files, key=lambda x: x.stat().st_mtime)
+                size_mb = latest_file.stat().st_size / (1024 * 1024)
+                if size_mb > 0.1:
+                    print(f"✅ Descarga completada correctamente con yt-dlp: {latest_file.name} ({size_mb:.2f} MB)")
+                    success = True
+                else:
+                    print("❌ El archivo descargado es demasiado pequeño, probablemente corrupto.")
+            else:
+                print("❌ yt-dlp no generó ningún archivo MP3.")
+        else:
+            print(f"❌ Error ejecutando yt-dlp: {download_proc.stderr.strip()}")
+
+    except Exception as e:
+        print(f"❌ Error en la descarga con yt-dlp: {e}")
+
+    return success
+
+
+    # 🔄 Intentando con yt-dlp como alternativa...
+    print("🔄 Intentando con yt-dlp como alternativa...")
+
+    # Inicializar valores por defecto
+    track_name = None
+    artist_name = None
+    clean_query = None
+
+    # Asegurarse de que existe output_dir
+    if 'output_dir' not in locals():
+        output_dir = os.path.join(os.getcwd(), "downloads_fallback")
+        os.makedirs(output_dir, exist_ok=True)
+
+    # Asegurarse de que existe sp (cliente Spotify)
+    try:
+        if 'sp' not in locals():
+            import spotipy
+            from spotipy.oauth2 import SpotifyClientCredentials
+            with open("spotify_client_data.txt") as f:
+                lines = [line.strip() for line in f if line.strip()]
+            client_id, client_secret = lines[:2]
+            sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+    except Exception as e:
+        print(f"⚠️ No se pudo inicializar cliente Spotify: {e}")
+
+    # Asegurarse de que existe track_url
+    if 'track_url' not in locals() or not track_url:
+        track_url = input("Introduce la URL del track de Spotify: ").strip()
+
+    # Intentar obtener información real desde Spotify
+    try:
+        track_info = sp.track(track_url)
+        track_name = track_info['name']
+        artist_name = track_info['artists'][0]['name']
+        clean_query = f"{artist_name} - {track_name}"
+        print(f"🎯 Nombre obtenido de Spotify: {clean_query}")
+    except Exception as e:
+        print(f"⚠️ No se pudo obtener información de Spotify: {e}")
+        clean_query = "unknown track"
+
+    # Construir búsqueda en YouTube
+    search_query = f"ytsearch5:{clean_query}"
+    print(f"🔍 Buscando en YouTube: {search_query}")
+
+    try:
+        # Obtener lista de resultados JSON
+        cmd_info = f'yt-dlp --dump-json --flat-playlist "{search_query}"'
+        process = subprocess.run(shlex.split(cmd_info), capture_output=True, text=True)
+        lines = [json.loads(line) for line in process.stdout.strip().splitlines() if line.strip()]
+
+        if not lines:
+            print("❌ No se encontraron resultados en YouTube.")
+            raise RuntimeError("No se encontraron resultados en YouTube")
+
+        # Seleccionar primer resultado (el más relevante)
+        best_match = lines[0]
+        video_url = f"https://www.youtube.com/watch?v={best_match['id']}"
+        print(f"🏆 Mejor coincidencia: {best_match['title']}")
+        print(f"🔗 URL seleccionada: {video_url}")
+
+        # Descargar con yt-dlp
+        yt_dlp_cmd = [
+            "yt-dlp", "-x", "--audio-format", "mp3",
+            "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),
+            video_url
+        ]
+        print("⬇️ Descargando con yt-dlp...")
+        subprocess.run(yt_dlp_cmd)
+
+    except Exception as e:
+        print(f"❌ Error en la descarga con yt-dlp: {e}")
 
 def normalize_spotify_url(url):
     """Normaliza URLs de Spotify"""
@@ -546,7 +650,103 @@ def get_song_info_for_display(url, spotdl_args=None):
     
     return None
 
-def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeout=300):
+def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeout=300, fallback_list=None):
+    """
+    Descarga una canción mostrando errores detallados con reintentos y verificación.
+    Si SpotDL falla, usa yt-dlp con el nombre real de Spotify y marca la canción como 'fallback'.
+    """
+    song_info = get_song_info_for_display(url, spotdl_args)
+    if song_info:
+        print(f"🎵 Intentando descargar: {song_info}")
+    else:
+        print(f"🎵 Intentando descargar URL: {url}")
+    
+    max_retries = 3
+    retry_delay = 5
+    expected_filename = get_expected_filename(url, output_path, spotdl_args)
+
+    if expected_filename:
+        print(f"📁 Archivo esperado: {expected_filename}")
+
+    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
+    
+    # --- 🔁 Intentar con SpotDL ---
+    for attempt in range(max_retries):
+        try:
+            print(f"⏳ Ejecutando SpotDL (intento {attempt + 1}/{max_retries})...")
+            cmd = [
+                "spotdl", "download", url,
+                "--output", str(output_path / "{artist} - {title}.{output-ext}"),
+                "--format", "mp3", "--lyrics", "genius"
+            ]
+            if spotdl_args:
+                cmd += spotdl_args
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            if result.returncode == 0:
+                time.sleep(3)
+                current_files = set(output_path.glob("*.mp3"))
+                new_files = current_files - existing_files
+                if len(new_files) == 1:
+                    new_file = next(iter(new_files))
+                    size_mb = new_file.stat().st_size / (1024 * 1024)
+                    if size_mb > 0.1:
+                        print(f"✅ Descarga correcta con SpotDL: {new_file.name} ({size_mb:.2f} MB)")
+                        return True
+                print("⚠️ SpotDL reportó éxito pero la verificación falló, reintentando...")
+            else:
+                print(f"⚠️ Error SpotDL: {extract_spotdl_error(result.stderr)}")
+            time.sleep(retry_delay)
+        except subprocess.TimeoutExpired:
+            print(f"⏰ Timeout (intento {attempt+1}), reintentando...")
+            time.sleep(retry_delay)
+        except Exception as e:
+            print(f"⚠️ Error inesperado: {e}")
+            time.sleep(retry_delay)
+
+    # --- 🔄 Si SpotDL falla, probar con yt-dlp ---
+    print("🔄 Todos los intentos con SpotDL fallaron, usando yt-dlp...")
+
+    # Obtener nombre real desde Spotify (para renombrar)
+    track_name = "Unknown"
+    artist_name = "Unknown"
+    try:
+        import spotipy
+        from spotipy.oauth2 import SpotifyClientCredentials
+        with open("spotify_client_data.txt") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        client_id, client_secret = lines[:2]
+        sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+        track_info = sp.track(url)
+        artist_name = track_info['artists'][0]['name']
+        track_name = track_info['name']
+    except Exception as e:
+        print(f"⚠️ No se pudo obtener info de Spotify: {e}")
+
+    clean_query = f"{artist_name} - {track_name}"
+    yt_success = download_with_yt_dlp(url, output_path, spotdl_args)
+
+    if yt_success:
+        mp3_files = list(output_path.glob("*.mp3"))
+        if mp3_files:
+            latest_file = max(mp3_files, key=lambda x: x.stat().st_mtime)
+            new_name = f"{clean_query}.mp3"
+            safe_name = re.sub(r'[<>:"/\\|?*]', '', new_name)
+            new_path = output_path / safe_name
+            try:
+                latest_file.rename(new_path)
+                print(f"✅ Archivo renombrado a: {safe_name}")
+            except Exception as e:
+                print(f"⚠️ No se pudo renombrar el archivo: {e}")
+
+            if fallback_list is not None:
+                fallback_list.append(clean_query)
+            print(f"✅ Descarga alternativa exitosa: {clean_query}")
+            return True
+
+    print("❌ Falló incluso con yt-dlp")
+    return False
+
     """Descarga una canción mostrando errores detallados con reintentos y verificación"""
     # Mostrar información de la canción antes de descargar
     song_info = get_song_info_for_display(url, spotdl_args)
@@ -761,7 +961,8 @@ def download_multiple_songs(spotdl_args=None):
         # Obtener archivos existentes antes de cada descarga
         existing_files = set(output_dir.glob("*.mp3"))
         
-        success = download_song_with_detailed_errors(url, output_dir, spotdl_args)
+        fallback_downloads = []
+        success = download_song_with_detailed_errors(url, output_dir, spotdl_args, fallback_list=fallback_downloads)
         
         if success:
             stats['success'] += 1
@@ -771,6 +972,11 @@ def download_multiple_songs(spotdl_args=None):
             stats['failed_urls'].append(url)
             print(f"❌ Error descargando canción {i}")
     
+    if fallback_downloads:
+        print("\n⚠️ Canciones que se descargaron usando yt-dlp (verifícalas manualmente):")
+        for name in fallback_downloads:
+            print(f"   - {name}")
+
     # Mostrar resumen
     print("\n" + "=" * 60)
     print("📊 RESUMEN DE DESCARGA")
@@ -823,7 +1029,8 @@ def download_single_song():
     print(f"📁 Carpeta de destino: {output_dir}")
     print("-" * 50)
     
-    success = download_song_with_detailed_errors(normalized_url, output_dir, spotdl_args)
+    fallback_downloads = []
+    success = download_song_with_detailed_errors(normalized_url, output_dir, spotdl_args, fallback_list=fallback_downloads)
     
     if success:
         print("\n🎉 ¡Descarga completada con éxito!")
@@ -835,6 +1042,12 @@ def download_single_song():
         else:
             print("❌ La descarga reportó éxito pero no hay archivos MP3")
             print("💡 Revisa los permisos de la carpeta 'downloads'")
+        
+        if fallback_downloads:
+            print("\n⚠️ Canción descargada con yt-dlp (verifícala manualmente):")
+            for name in fallback_downloads:
+                print(f"   - {name}")
+
     else:
         print("\n💥 La descarga falló")
 
