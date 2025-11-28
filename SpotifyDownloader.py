@@ -3,9 +3,16 @@ import time
 import json
 import logging
 import re
+from difflib import SequenceMatcher
 import sys
 from pathlib import Path
 import subprocess, shlex
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from mutagen.easyid3 import EasyID3
+import unicodedata
+from mutagen.id3 import ID3, TRCK, WOAS, TSRC
+import mutagen
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -271,6 +278,53 @@ def normalize_spotify_url(url):
         track_id = match.group(1)
         return f"https://open.spotify.com/track/{track_id}"
     return url
+
+def normalize_name(name: str) -> str:
+    """
+    Normaliza nombres para comparación:
+    - sin mayúsculas
+    - sin acentos
+    - símbolos ilegales eliminados
+    - espacios compactados
+    """
+    name = unicodedata.normalize("NFD", name)
+    name = "".join(c for c in name if unicodedata.category(c) != "Mn")
+    name = name.lower()
+
+    # quitar símbolos que Windows no permite
+    name = re.sub(r'[<>:"/\\|?*]', "", name)
+
+    # quitar paréntesis extra y contenido redundante
+    name = re.sub(r"\([^)]*\)", "", name)
+
+    # compactar espacios
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
+
+def load_full_id3_tags(mp3_path):
+    """Carga etiquetas ID3 completas usando mutagen.ID3."""
+    try:
+        return ID3(mp3_path)
+    except mutagen.id3.ID3NoHeaderError:
+        tags = ID3()
+        tags.save(mp3_path)
+        return ID3(mp3_path)
+
+def update_track_tags(mp3_path, track_number, isrc=None):
+    """
+    Actualiza SOLO:
+      - TRCK (número de pista)
+      - TSRC (ISRC)
+    Sin tocar nada más.
+    """
+    tags = load_full_id3_tags(mp3_path)
+
+    tags.setall("TRCK", [TRCK(encoding=3, text=str(track_number))])
+
+    if isrc:
+        tags.setall("TSRC", [TSRC(encoding=3, text=isrc)])
+
+    tags.save(mp3_path)
 
 def is_valid_spotify_track_url(url):
     """Verifica si una URL es de una canción de Spotify válida"""
@@ -727,15 +781,35 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
     yt_success = download_with_yt_dlp(url, output_path, spotdl_args)
 
     if yt_success:
-        mp3_files = list(output_path.glob("*.mp3"))
+        mp3_files: list[Path] = list(output_path.glob("*.mp3"))
         if mp3_files:
-            latest_file = max(mp3_files, key=lambda x: x.stat().st_mtime)
+            latest_file: Path = max(mp3_files, key=lambda x: x.stat().st_mtime)
             new_name = f"{clean_query}.mp3"
             safe_name = re.sub(r'[<>:"/\\|?*]', '', new_name)
             new_path = output_path / safe_name
             try:
-                latest_file.rename(new_path)
-                print(f"✅ Archivo renombrado a: {safe_name}")
+                # Si el archivo final ya existe, borrar duplicado y NO fallar
+                if new_path.exists():
+                    print("ℹ️ El archivo correcto ya existe, se elimina el duplicado descargado.")
+                    try:
+                        latest_file.unlink()  # borrar el archivo nuevo duplicado
+                    except:
+                        pass
+
+                    # Registrar como éxito igualmente
+                    if fallback_list is not None:
+                        fallback_list.append(clean_query)
+
+                    print(f"👍 Se mantuvo el archivo existente: {new_path.name}")
+                    return True
+
+                # Si no existe, renombrar normalmente
+                try:
+                    latest_file.rename(new_path)
+                    print(f"✅ Archivo renombrado a: {safe_name}")
+                except Exception as e:
+                    print(f"⚠️ No se pudo renombrar el archivo: {e}")
+                    new_path = latest_file
             except Exception as e:
                 print(f"⚠️ No se pudo renombrar el archivo: {e}")
                 new_path = latest_file  # usar el nombre original si no se pudo renombrar
@@ -749,8 +823,8 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
             return True
 
 
-    print("❌ Falló incluso con yt-dlp")
-    return False
+        print("❌ Falló incluso con yt-dlp")
+        return False
 
     """Descarga una canción mostrando errores detallados con reintentos y verificación"""
     # Mostrar información de la canción antes de descargar
@@ -1081,6 +1155,539 @@ https://open.spotify.com/track/0B7c7s1qumVfKVSJhQbq1L
             f.write(example_content)
         print("📄 Archivo 'songs-to-download.txt' creado con ejemplo")
 
+def find_best_match(artist, title, mp3_files, assigned_files):
+    target = normalize_song_name(f"{artist} {title}")
+
+    exact_matches = []
+    title_matches = []
+    fuzzy_candidates = []
+
+    for mp3 in mp3_files:
+        if mp3 in assigned_files:
+            continue
+
+        name_norm = normalize_song_name(mp3.stem)
+
+        # 1) Coincidencia exacta artista+título
+        if name_norm == target:
+            exact_matches.append(mp3)
+            continue
+
+        # 2) Coincidencia exacta por título
+        if normalize_song_name(title) in name_norm:
+            title_matches.append(mp3)
+            continue
+
+        # 3) Coincidencia fuzzy (muy estricta)
+        ratio = SequenceMatcher(None, name_norm, target).ratio()
+        fuzzy_candidates.append((ratio, mp3))
+
+    # 1) Exact artist-title match
+    if exact_matches:
+        return exact_matches[0]
+
+    # 2) Exact title match
+    if len(title_matches) == 1:
+        return title_matches[0]
+    elif len(title_matches) > 1:
+        print(f"⚠️ Duplicados detectados para: {artist} - {title}:")
+        for f in title_matches:
+            print("   -", f.name)
+        return None
+
+    # 3) Fuzzy matching
+    if fuzzy_candidates:
+        best_ratio, best_file = max(fuzzy_candidates)
+        if best_ratio >= 0.93:
+            return best_file
+
+    return None
+
+def match_local_file_to_track(mp3_file, artist, title):
+    """
+    Asocia un archivo MP3 con una canción usando SOLO el nombre,
+    nunca el WOAS ni tracknumber (para no liar el orden).
+    """
+    file_norm = normalize_song_name(mp3_file.stem)
+    target_norm = normalize_song_name(f"{artist} {title}")
+
+    # Coincidencia exacta "artist title"
+    if file_norm == target_norm:
+        return True
+
+    # Coincidencia por título
+    title_norm = normalize_song_name(title)
+    if title_norm in file_norm:
+        return True
+
+    # Fuzzy match fuerte
+    ratio = SequenceMatcher(None, file_norm, target_norm).ratio()
+    if ratio >= 0.90:
+        return True
+
+    return False
+
+def sync_spotify_playlist(spotdl_args=None):
+    """Sincroniza una carpeta local con una playlist de Spotify (detección primero, luego actualización)."""
+    print("\n" + "="*50)
+    print("🔄 SINCRONIZAR PLAYLIST DE SPOTIFY")
+    print("="*50)
+
+    playlist_url = input("Introduce la URL de la playlist de Spotify: ").strip()
+    local_folder = Path(input("Introduce la ruta de la carpeta local de la playlist: ").strip())
+
+    if not local_folder.exists():
+        print(f"❌ La carpeta {local_folder} no existe.")
+        return
+
+    # --- Autenticación con Spotify ---
+    try:
+        with open("spotify_client_data.txt") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        client_id, client_secret = lines[:2]
+        sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+    except Exception as e:
+        print(f"❌ Error inicializando cliente Spotify: {e}")
+        return
+
+    # --- Obtener información de la playlist ---
+    print("📡 Obteniendo información de la playlist...")
+    playlist_id = playlist_url.split("/")[-1].split("?")[0]
+
+    try:
+        results = sp.playlist_tracks(playlist_id)
+    except Exception as e:
+        print(f"❌ Error obteniendo tracks de la playlist: {e}")
+        return
+
+    tracks = results["items"]
+    while results.get("next"):
+        results = sp.next(results)
+        tracks.extend(results["items"])
+
+    total_tracks = len(tracks)
+    print(f"🎧 Playlist con {total_tracks} canciones encontradas\n")
+
+    # ================================
+    # 🔍 VERIFICAR NOMBRE DE CARPETA
+    # ================================
+    playlist_name = sp.playlist(playlist_id)["name"]
+    norm_playlist = normalize_folder_name(playlist_name)
+    norm_folder = normalize_folder_name(local_folder.name)
+
+    if norm_playlist != norm_folder:
+        print("⚠️ El nombre de la carpeta NO coincide con el nombre de la playlist.")
+        print(f"   Carpeta actual : {local_folder.name}")
+        print(f"   Playlist nombre: {playlist_name}\n")
+
+        resp = input("¿Quieres renombrar la carpeta automáticamente? (s/n): ").strip().lower()
+
+        if resp == "s":
+            try:
+                new_path = local_folder.parent / playlist_name
+                local_folder.rename(new_path)
+                local_folder = new_path
+                print(f"✅ Carpeta renombrada a: {playlist_name}\n")
+            except Exception as e:
+                print(f"❌ Error renombrando carpeta: {e}")
+                return
+
+        else:
+            resp2 = input(
+                "¿Quieres crear una carpeta nueva para esta playlist y usarla? (s/n): "
+            ).strip().lower()
+
+            if resp2 == "s":
+                try:
+                    new_path = local_folder.parent / playlist_name
+                    new_path.mkdir(exist_ok=True)
+                    print(f"📁 Carpeta creada: {new_path}")
+                    local_folder = new_path
+                except Exception as e:
+                    print(f"❌ No se pudo crear la carpeta: {e}")
+                    return
+
+            else:
+                print("↩️ Operación cancelada. Volviendo al menú principal.")
+                return
+
+    # --- FASE 1: DETECCIÓN ---
+    mp3_files = list(local_folder.glob("*.mp3"))
+    assigned_files = set()
+    found_matches = []
+    missing_tracks = []
+    corrupt_files_seen = set()
+
+    print("🔎 Buscando coincidencias en la carpeta local (fase de detección)...")
+
+    for i, item in enumerate(tracks, start=1):
+        track = item["track"]
+        if not track:
+            continue
+
+        artist = track["artists"][0]["name"]
+        title = track["name"]
+        url = track["external_urls"]["spotify"]
+        track_num = i
+
+        matched = False
+
+        for mp3_file in mp3_files:
+            if mp3_file in assigned_files:
+                continue
+
+            # Detectar si tiene WOAS
+            has_woas = False
+            stored_url = None
+
+            try:
+                tags = ID3(mp3_file)
+                woas = tags.get("WOAS")
+                if woas:
+                    has_woas = True
+                    stored_url = woas.url.strip()
+            except:
+                pass
+
+            # === PRIMERA REGLA: SI NOMBRE COINCIDE ===
+            if match_local_file_to_track(mp3_file, artist, title):
+
+                # SIN WOAS → match directo
+                if not has_woas:
+                    found_matches.append((mp3_file, track_num, artist, title))
+                    assigned_files.add(mp3_file)
+                    matched = True
+                    break
+
+                # CON WOAS → comparar IDs
+                stored_id = extract_track_id(stored_url)
+                expected_id = extract_track_id(url)
+
+                if stored_id == expected_id:
+                    # Archivo CORRECTO
+                    found_matches.append((mp3_file, track_num, artist, title))
+                    assigned_files.add(mp3_file)
+                    matched = True
+                    break
+
+                else:
+                    # Archivo coincide por nombre pero tiene WOAS de otra canción
+                    if mp3_file not in corrupt_files_seen:
+                        print(f"⚠️ {mp3_file.name} coincide por nombre pero WOAS no coincide → se re-descargará.")
+                        corrupt_files_seen.add(mp3_file)
+
+                        missing_tracks.append({
+                            "index": track_num,
+                            "artist": artist,
+                            "title": title,
+                            "url": url,
+                            "force_redownload": True,
+                            "bad_file": mp3_file
+                        })
+
+                    assigned_files.add(mp3_file)
+                    matched = True
+                    break
+
+        if not matched:
+            missing_tracks.append({
+                "index": track_num,
+                "artist": artist,
+                "title": title,
+                "url": url
+            })
+
+    # --- FASE 2: ACTUALIZACIÓN DE METADATOS ---
+    print("\n🛠️ Actualizando metadatos (fase de actualización)...")
+    updated_metadata = 0
+    correct_track_numbers = 0
+    changes_log = []
+
+    for mp3_file, track_num, artist, title in found_matches:
+
+        # Leer TRCK actual
+        try:
+            tags = EasyID3(mp3_file)
+            current_num = tags.get("tracknumber", ["0"])[0]
+        except:
+            current_num = "0"
+
+        current_clean = str(current_num).split('/')[0] if current_num else "0"
+
+        # ISRC desde Spotify
+        isrc = None
+        if track_num <= len(tracks):
+            trk = tracks[track_num - 1]["track"]
+            if trk:
+                isrc = trk.get("external_ids", {}).get("isrc")
+
+        # Ya correcto
+        if current_clean == str(track_num):
+            correct_track_numbers += 1
+            print(f"✅ {mp3_file.name} → pista #{track_num} (ya correcta)")
+            continue
+
+        # Actualizar TRCK + TSRC
+        try:
+            old = current_clean
+            update_track_tags(
+                mp3_file,
+                track_number=track_num,
+                isrc=isrc
+            )
+            updated_metadata += 1
+            changes_log.append(f"{mp3_file.name}: {old} → {track_num}")
+            print(f"🛠️ {mp3_file.name} → pista actualizada {old} → {track_num}")
+
+        except Exception as e:
+            print(f"⚠️ No se pudo actualizar metadatos en {mp3_file.name}: {e}")
+
+    found_tracks = len(found_matches)
+
+    # --- RESUMEN ---
+    print("\n" + "="*50)
+    print("📊 RESULTADO DE DETECCIÓN / ACTUALIZACIÓN")
+    print("="*50)
+    print(f"• Canciones en playlist: {total_tracks}")
+    print(f"• Canciones encontradas en carpeta: {found_tracks}")
+    print(f"• Números de pista correctos: {correct_track_numbers}")
+    print(f"• Números de pista actualizados: {updated_metadata}")
+    print(f"• Canciones faltantes: {len(missing_tracks)}")
+
+    if changes_log:
+        print("\n📝 Cambios realizados:")
+        for c in changes_log:
+            print(f"   - {c}")
+
+    # =========================================
+    # 🗑️ BORRAR ARCHIVOS QUE NO SON DE PLAYLIST
+    # =========================================
+
+    print("\n🔎 Buscando archivos que no pertenecen a la playlist...")
+
+    matched_files = {f for (f, _, _, _) in found_matches}
+    playlist_files = set(local_folder.glob("*.mp3"))
+
+    extra_files = playlist_files - matched_files
+
+    if extra_files:
+        print(f"⚠️ Se encontraron {len(extra_files)} archivos no pertenecientes a la playlist:")
+        for ef in extra_files:
+            print(f"   - {ef.name}")
+
+        resp = input("¿Deseas BORRAR estos archivos extra? (s/n): ").strip().lower()
+        if resp == "s":
+            for ef in extra_files:
+                try:
+                    ef.unlink()
+                    print(f"🗑️ Borrado: {ef.name}")
+                except Exception as e:
+                    print(f"❌ No se pudo borrar {ef.name}: {e}")
+        else:
+            print("ℹ️ No se borraron archivos extra.")
+    else:
+        print("✅ No hay archivos extra.")
+
+    # --- DESCARGAS ---
+    if missing_tracks:
+        print("\n🎵 Canciones faltantes:")
+        for m in missing_tracks:
+            if m.get("force_redownload") and m.get("bad_file"):
+                try:
+                    print(f"🗑️ Borrando archivo incorrecto: {m['bad_file'].name}")
+                    m["bad_file"].unlink()
+                except Exception as e:
+                    print(f"❌ No se pudo borrar {m['bad_file'].name}: {e}")
+
+            print(f"   [{m['index']:02}] {m['artist']} - {m['title']}")
+
+        resp = input("\n¿Deseas descargar las canciones faltantes? (s/n): ").strip().lower()
+        if resp == "s":
+            print("\n⬇️ Descargando canciones faltantes...\n")
+            output_dir = local_folder
+
+            existing_before = set(output_dir.glob("*.mp3"))
+
+            for m in missing_tracks:
+                print(f"🎵 [{m['index']:02}] {m['artist']} - {m['title']}")
+                ok = False
+                if m.get("url"):
+                    ok = download_song_with_detailed_errors(m["url"], output_dir, spotdl_args, fallback_list=None)
+                else:
+                    print("⚠️ No hay URL de Spotify para esta pista, se omite descarga.")
+
+                if ok:
+                    current_files = set(output_dir.glob("*.mp3"))
+                    new_files = list(current_files - existing_before)
+
+                    chosen_file = None
+                    if new_files:
+                        best_ratio = 0.0
+                        target_norm = normalize_song_name(f"{m['artist']} {m['title']}")
+                        for nf in new_files:
+                            ratio = SequenceMatcher(None, normalize_song_name(nf.stem), target_norm).ratio()
+                            if ratio > best_ratio:
+                                best_ratio = ratio
+                                chosen_file = nf
+
+                        if chosen_file is None:
+                            chosen_file = max(new_files, key=lambda x: x.stat().st_mtime)
+
+                        try:
+                            tags = EasyID3(chosen_file)
+                        except:
+                            tags = EasyID3()
+
+                        try:
+                            tags["tracknumber"] = str(m['index'])
+                            tags.save(chosen_file)
+                            print(f"✅ Metadato de pista actualizado para {chosen_file.name}")
+                        except Exception as e:
+                            print(f"⚠️ No se pudo escribir tag en {chosen_file.name}: {e}")
+
+                        existing_before = set(current_files)
+
+            print("\n🎉 Sincronización completada (descargas procesadas).")
+
+        else:
+            print("\nℹ️ Descargas omitidas por el usuario.")
+
+    else:
+        print("\n✅ Todas las canciones están sincronizadas.")
+
+    return
+
+def extract_track_id(url: str) -> str:
+    if not url:
+        return ""
+
+    # Normalizar unicode (importante por caracteres invisibles)
+    url = unicodedata.normalize("NFKC", url)
+
+    # Pasar a minúsculas
+    url = url.lower().strip()
+
+    # Quitar parámetros ?si=...
+    url = url.split("?")[0]
+
+    # Quitar /intl-es/ o variantes regionales
+    url = url.replace("/intl-es/", "/")
+    url = url.replace("/intl/", "/")
+    url = url.replace("/es/", "/")
+
+    # Quitar barra final
+    url = url.rstrip("/")
+
+    # Extraer ID por regex (24 caracteres)
+    match = re.search(r"track/([a-z0-9]{22})", url)
+    if match:
+        return match.group(1)
+
+    return url  # fallback en caso raro
+
+def normalize_song_name(name: str) -> str:
+    """
+    Limpia y normaliza nombres de canciones o archivos:
+    - Elimina caracteres ilegales o especiales
+    - Convierte a minúsculas
+    - Reemplaza guiones, paréntesis y símbolos por espacios
+    - Elimina palabras vacías comunes (feat, remix, official, etc.)
+    """
+    name = re.sub(r'[<>:"/\\|?*]', '', name)  # eliminar caracteres ilegales
+    name = re.sub(r'[\(\)\[\]\{\}_\-\+]', ' ', name)  # reemplazar separadores
+    name = re.sub(r'\s+', ' ', name).strip().lower()  # espacios y minúsculas
+    
+    # eliminar palabras accesorias típicas
+    stopwords = ['feat', 'ft', 'remix', 'version', 'official', 'audio', 'video', 'explicit']
+    for w in stopwords:
+        name = re.sub(rf'\b{w}\b', '', name)
+    return re.sub(r'\s+', ' ', name).strip()
+
+def normalize_string(s: str) -> str:
+    """Normaliza cadenas quitando símbolos, espacios y pasando a minúsculas"""
+    return re.sub(r'[^a-z0-9]+', '', s.lower())
+
+def normalize_folder_name(name: str):
+    """Normaliza nombre para compararlo con carpetas."""
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
+def is_matching_song(filename_stem, artist, title, threshold=0.82):
+    """
+    Compara el nombre del archivo con artista y título.
+    Usa similitud fuzzy pero exige coincidencia fuerte del título completo
+    para evitar confundir 'Firestone' con 'First Time'.
+    """
+    # Normalizar
+    name_norm = normalize_string(filename_stem)
+    artist_norm = normalize_string(artist)
+    title_norm = normalize_string(title)
+
+    # Evita falsos positivos cuando el título contiene el otro parcialmente
+    if title_norm in name_norm or name_norm in title_norm:
+        title_score = 1.0
+    else:
+        title_score = SequenceMatcher(None, title_norm, name_norm).ratio()
+
+    # Bonus si el artista coincide en parte
+    artist_score = SequenceMatcher(None, artist_norm, name_norm).ratio()
+
+    # Peso: título 80%, artista 20%
+    similarity = title_score * 0.8 + artist_score * 0.2
+
+    # Coincidencia solo si el título coincide muy bien
+    return similarity >= threshold and title_score > 0.9
+    """
+    Comprueba si un nombre de archivo coincide con un artista/título dados,
+    usando coincidencia flexible y ratio de similitud.
+    """
+    normalized_file = normalize_song_name(file_stem)
+    normalized_target = normalize_song_name(f"{artist} {title}")
+
+    ratio = SequenceMatcher(None, normalized_file, normalized_target).ratio()
+    return ratio >= threshold
+
+def match_by_spotify_id(mp3_file, spotify_url):
+    """Devuelve True si el MP3 contiene el tag WOAS y coincide con la URL original de Spotify."""
+    try:
+        tags = ID3(mp3_file)
+        if "WOAS" in tags:
+            return tags["WOAS"].url == spotify_url
+    except:
+        pass
+    return False
+
+def match_by_tracknumber_and_artist(mp3_file, track_num, artist):
+    """
+    Coincidencia secundaria para archivos descargados SIN WOAS.
+    Si el MP3 contiene WOAS, esta función SIEMPRE devuelve False.
+    """
+    # Si el archivo tiene WOAS → NO usar esta coincidencia
+    try:
+        id3 = ID3(mp3_file)
+        if id3.get("WOAS"):
+            return False
+    except:
+        pass
+
+    # Procesar como coincidencia secundaria
+    try:
+        tags = EasyID3(mp3_file)
+    except:
+        return False
+
+    # 1) Coincidencia de tracknumber
+    trck = tags.get("tracknumber", ["0"])[0]
+    clean = trck.split("/")[0]
+
+    if clean != str(track_num):
+        return False
+
+    # 2) Coincidencia aproximada de artista en el filename
+    filename = mp3_file.stem.lower()
+    artist_clean = artist.lower()
+
+    return artist_clean in filename
+
 def main_menu():
     """Menú principal de la aplicación"""
     if not check_spotdl_installation():
@@ -1097,9 +1704,10 @@ def main_menu():
         print("1. Descargar una canción individual")
         print("2. Descargar múltiples canciones desde archivo")
         print("3. Exportar playlist a archivo")
-        print("4. Salir")
+        print("4. Sincronizar playlist local con Spotify")
+        print("5. Salir")
         
-        opcion = input("\nElige una opción (1, 2, 3 o 4): ").strip()
+        opcion = input("\nElige una opción (1, 2, 3, 4 o 5): ").strip()
         
         if opcion == "1":
             download_single_song()
@@ -1109,6 +1717,9 @@ def main_menu():
         elif opcion == "3":
             export_playlist_to_file()
         elif opcion == "4":
+            spotdl_args = get_spotdl_credentials()
+            sync_spotify_playlist(spotdl_args)
+        elif opcion == "5":
             print("👋 ¡Hasta luego!")
             break
         else:
