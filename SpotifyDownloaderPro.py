@@ -197,79 +197,6 @@ def download_with_yt_dlp(spotify_url, output_path, spotdl_args=None):
 
     return success
 
-
-    # 🔄 Intentando con yt-dlp como alternativa...
-    print("🔄 Intentando con yt-dlp como alternativa...")
-
-    # Inicializar valores por defecto
-    track_name = None
-    artist_name = None
-    clean_query = None
-
-    # Asegurarse de que existe output_dir
-    if 'output_dir' not in locals():
-        output_dir = os.path.join(os.getcwd(), "downloads_fallback")
-        os.makedirs(output_dir, exist_ok=True)
-
-    # Asegurarse de que existe sp (cliente Spotify)
-    try:
-        if 'sp' not in locals():
-            import spotipy
-            from spotipy.oauth2 import SpotifyClientCredentials
-            with open("spotify_client_data.txt") as f:
-                lines = [line.strip() for line in f if line.strip()]
-            client_id, client_secret = lines[:2]
-            sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
-    except Exception as e:
-        print(f"⚠️ No se pudo inicializar cliente Spotify: {e}")
-
-    # Asegurarse de que existe track_url
-    if 'track_url' not in locals() or not track_url:
-        track_url = input("Introduce la URL del track de Spotify: ").strip()
-
-    # Intentar obtener información real desde Spotify
-    try:
-        track_info = sp.track(track_url)
-        track_name = track_info['name']
-        artist_name = track_info['artists'][0]['name']
-        clean_query = f"{artist_name} - {track_name}"
-        print(f"🎯 Nombre obtenido de Spotify: {clean_query}")
-    except Exception as e:
-        print(f"⚠️ No se pudo obtener información de Spotify: {e}")
-        clean_query = "unknown track"
-
-    # Construir búsqueda en YouTube
-    search_query = f"ytsearch5:{clean_query}"
-    print(f"🔍 Buscando en YouTube: {search_query}")
-
-    try:
-        # Obtener lista de resultados JSON
-        cmd_info = f'yt-dlp --dump-json --flat-playlist "{search_query}"'
-        process = subprocess.run(shlex.split(cmd_info), capture_output=True, text=True)
-        lines = [json.loads(line) for line in process.stdout.strip().splitlines() if line.strip()]
-
-        if not lines:
-            print("❌ No se encontraron resultados en YouTube.")
-            raise RuntimeError("No se encontraron resultados en YouTube")
-
-        # Seleccionar primer resultado (el más relevante)
-        best_match = lines[0]
-        video_url = f"https://www.youtube.com/watch?v={best_match['id']}"
-        print(f"🏆 Mejor coincidencia: {best_match['title']}")
-        print(f"🔗 URL seleccionada: {video_url}")
-
-        # Descargar con yt-dlp
-        yt_dlp_cmd = [
-            "yt-dlp", "-x", "--audio-format", "mp3",
-            "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),
-            video_url
-        ]
-        print("⬇️ Descargando con yt-dlp...")
-        subprocess.run(yt_dlp_cmd)
-
-    except Exception as e:
-        print(f"❌ Error en la descarga con yt-dlp: {e}")
-
 def normalize_spotify_url(url):
     """Normaliza URLs de Spotify"""
     pattern = r'https://open\.spotify\.com/(?:intl-[a-z]{2}/)?track/([a-zA-Z0-9]+)'
@@ -466,134 +393,63 @@ def verify_download_completion(output_path, expected_filename=None, existing_fil
     print(f"   Archivos: {[f.name for f in current_files]}")
     return False
 
-def fetch_playlist_urls(playlist_url, spotdl_args=None, max_retries=3):
-    """Obtiene todas las URLs de una playlist de Spotify usando el método de guardar metadata"""
-    temp_metadata = Path("temp_playlist_metadata.spotdl")
+def fetch_playlist_urls(playlist_url, spotdl_args=None):
+    """Obtiene todas las URLs de una playlist de Spotify usando la API de Spotify"""
+    import re
     
-    for attempt in range(max_retries):
-        try:
-            print(f"🔍 Obteniendo metadatos de la playlist (intento {attempt+1}/{max_retries})...")
-            
-            # Limpiar archivo temporal si existe de intentos anteriores
-            if temp_metadata.exists():
-                temp_metadata.unlink()
-            
-            # Construir comando spotdl save - NUEVO FORMATO para spotdl 4.4.1
-            cmd = ["spotdl", "save", playlist_url, "--save-file", str(temp_metadata)]
-            
-            # Añadir flags para evitar problemas
-            cmd += [
-                "--audio", "youtube",
-                "--lyrics", "genius"  # Usar solo Genius, evitar AZLyrics que causa problemas
-            ]
-            
-            # Añadir credenciales si están disponibles (nuevo formato)
-            if spotdl_args:
-                # Convertir el formato antiguo --client-id x --client-secret y
-                # al nuevo formato --client-id=x --client-secret=y
-                converted_args = []
-                i = 0
-                while i < len(spotdl_args):
-                    if spotdl_args[i] in ["--client-id", "--client-secret"]:
-                        if i + 1 < len(spotdl_args):
-                            converted_args.append(f"{spotdl_args[i]}={spotdl_args[i+1]}")
-                            i += 2
-                        else:
-                            i += 1
-                    else:
-                        converted_args.append(spotdl_args[i])
-                        i += 1
-                cmd += converted_args
-            
-            print(f"📝 Comando ejecutado: {' '.join(cmd)}")
-            
-            # Ejecutar comando
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-            
-            # Mostrar salida completa para diagnóstico - SIN TRUNCAR
-            if result.stdout:
-                print("📋 Salida completa:")
-                print(result.stdout)
-            if result.stderr:
-                print("⚠️  Errores completos:")
-                print(result.stderr)
-            
-            if result.returncode != 0:
-                error_msg = f"Error ejecutando spotdl save (código {result.returncode})"
-                print(f"❌ {error_msg}")
-                
-                # Esperar antes de reintentar (backoff exponencial)
-                wait_time = 2 ** attempt
-                print(f"⏳ Esperando {wait_time} segundos antes de reintentar...")
-                time.sleep(wait_time)
-                continue
-            
-            # Verificar que el archivo se creó y no está vacío
-            if not temp_metadata.exists():
-                error_msg = "El archivo de metadata no se creó"
-                print(f"❌ {error_msg}")
-                continue
-                
-            if temp_metadata.stat().st_size == 0:
-                error_msg = "El archivo de metadata está vacío"
-                print(f"❌ {error_msg}")
-                continue
-            
-            # Leer y procesar el archivo de metadata
-            with open(temp_metadata, 'r', encoding='utf-8') as f:
-                content = f.read()
-                if not content.strip():
-                    error_msg = "El archivo de metadata está vacío"
-                    print(f"❌ {error_msg}")
-                    continue
-                    
-                playlist_data = json.loads(content)
-            
-            # Extraer URLs de las canciones
-            song_urls = []
-            for item in playlist_data:
-                if isinstance(item, dict) and 'url' in item and item['url'].startswith('https://open.spotify.com/track/'):
-                    song_urls.append(item['url'])
-            
-            if not song_urls:
-                error_msg = "No se encontraron URLs de canciones en los metadatos"
-                print(f"❌ {error_msg}")
-                continue
-            
-            # Limpiar archivo temporal
-            temp_metadata.unlink()
-            
-            print(f"✅ Se encontraron {len(song_urls)} canciones en la playlist")
-            return song_urls, None
-            
-        except subprocess.TimeoutExpired:
-            error_msg = f"Timeout al obtener la metadata (intento {attempt+1})"
-            print(f"❌ {error_msg}")
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                print(f"⏳ Esperando {wait_time} segundos antes de reintentar...")
-                time.sleep(wait_time)
-        except json.JSONDecodeError as e:
-            error_msg = f"Error decodificando JSON: {e}"
-            print(f"❌ {error_msg}")
-        except Exception as e:
-            error_msg = f"Error inesperado: {str(e)}"
-            print(f"❌ {error_msg}")
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                print(f"⏳ Esperando {wait_time} segundos antes de reintentar...")
-                time.sleep(wait_time)
+    # Extract playlist_id from URL
+    match = re.search(r'/playlist/([a-zA-Z0-9]+)', playlist_url)
+    if not match:
+        error_msg = "Invalid playlist URL"
+        print(f"❌ {error_msg}")
+        return None, error_msg
+    playlist_id = match.group(1)
     
-    # Limpiar archivo temporal en caso de error
-    if temp_metadata.exists():
-        try:
-            temp_metadata.unlink()
-        except:
-            pass
+    # Get credentials from spotdl_args
+    client_id = None
+    client_secret = None
+    if spotdl_args:
+        i = 0
+        while i < len(spotdl_args):
+            if spotdl_args[i] == '--client-id' and i + 1 < len(spotdl_args):
+                client_id = spotdl_args[i + 1]
+                i += 2
+            elif spotdl_args[i] == '--client-secret' and i + 1 < len(spotdl_args):
+                client_secret = spotdl_args[i + 1]
+                i += 2
+            else:
+                i += 1
     
-    error_msg = "No se pudo obtener la playlist después de múltiples intentos"
-    print(f"💥 {error_msg}")
-    return None, error_msg
+    if not client_id or not client_secret:
+        error_msg = "Spotify credentials not provided in spotdl_args"
+        print(f"❌ {error_msg}")
+        return None, error_msg
+    
+    # Authenticate with Spotify
+    sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+    
+    try:
+        # Get playlist tracks (handle pagination)
+        song_urls = []
+        results = sp.playlist_tracks(playlist_id)
+        while results:
+            for item in results['items']:
+                if item['track']:  # Some items might be None
+                    uri = item['track']['uri']
+                    url = uri.replace('spotify:track:', 'https://open.spotify.com/track/')
+                    song_urls.append(url)
+            if results['next']:
+                results = sp.next(results)
+            else:
+                break
+        
+        print(f"✅ Se encontraron {len(song_urls)} canciones en la playlist")
+        return song_urls, None
+    
+    except Exception as e:
+        error_msg = f"Error obteniendo playlist: {str(e)}"
+        print(f"❌ {error_msg}")
+        return None, error_msg
 
 def save_urls_to_file(urls, file_path):
     """Guarda las URLs en el archivo, preguntando antes si ya existe contenido"""
@@ -704,7 +560,7 @@ def get_song_info_for_display(url, spotdl_args=None):
     
     return None
 
-def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeout=300, fallback_list=None):
+def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeout=300, fallback_list=None, track_number=None):
     """
     Descarga una canción mostrando errores detallados con reintentos y verificación.
     Si SpotDL falla, usa yt-dlp con el nombre real de Spotify y marca la canción como 'fallback'.
@@ -746,6 +602,12 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
                     size_mb = new_file.stat().st_size / (1024 * 1024)
                     if size_mb > 0.1:
                         print(f"✅ Descarga correcta con SpotDL: {new_file.name} ({size_mb:.2f} MB)")
+                        if track_number:
+                            try:
+                                update_track_tags(str(new_file), track_number)
+                                print(f"🏷️ Metadato TRCK actualizado a {track_number}")
+                            except Exception as e:
+                                print(f"⚠️ No se pudo actualizar TRCK: {e}")
                         return True
                 print("⚠️ SpotDL reportó éxito pero la verificación falló, reintentando...")
             else:
@@ -820,141 +682,17 @@ def download_song_with_detailed_errors(url, output_path, spotdl_args=None, timeo
                 print(f"📋 Añadida a la lista de verificación manual: {clean_query}")
 
             print(f"✅ Descarga alternativa exitosa: {clean_query}")
+            if track_number:
+                try:
+                    update_track_tags(str(new_path), track_number)
+                    print(f"🏷️ Metadato TRCK actualizado a {track_number}")
+                except Exception as e:
+                    print(f"⚠️ No se pudo actualizar TRCK: {e}")
             return True
 
 
         print("❌ Falló incluso con yt-dlp")
         return False
-
-    """Descarga una canción mostrando errores detallados con reintentos y verificación"""
-    # Mostrar información de la canción antes de descargar
-    song_info = get_song_info_for_display(url, spotdl_args)
-    if song_info:
-        print(f"🎵 Intentando descargar: {song_info}")
-    else:
-        print(f"🎵 Intentando descargar URL: {url}")
-    
-    max_retries = 3
-    retry_delay = 5
-    
-    # Predecir el nombre del archivo esperado
-    expected_filename = get_expected_filename(url, output_path, spotdl_args)
-    if expected_filename:
-        print(f"📁 Archivo esperado: {expected_filename}")
-    
-    # Obtener archivos existentes antes de empezar
-    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
-    initial_file_count = len(existing_files)
-    
-    for attempt in range(max_retries):
-        try:
-            print(f"⏳ Ejecutando SpotDL (intento {attempt + 1}/{max_retries})...")
-            
-            # Obtener archivos existentes ANTES de cada intento
-            existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
-            initial_count = len(existing_files)
-
-            cmd = [
-                "spotdl", "download", url,
-                "--output", str(output_path / "{artist} - {title}.{output-ext}"),
-                "--format", "mp3",
-                "--lyrics", "genius"
-            ]
-            
-            if spotdl_args:
-                cmd += spotdl_args
-            
-            # Ejecutar SpotDL
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-            
-            if result.returncode == 0:
-                # Esperar un poco para que el sistema de archivos se actualice
-                time.sleep(3)
-                
-                # Verificar que se haya creado exactamente un archivo nuevo
-                current_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
-                new_files = current_files - existing_files
-                current_count = len(current_files)
-                
-                print(f"📊 Archivos antes: {initial_count}, después: {current_count}, nuevos: {len(new_files)}")
-                
-                # Verificación robusta: debe haber exactamente un archivo nuevo
-                if len(new_files) == 1:
-                    new_file = next(iter(new_files))
-                    file_size = new_file.stat().st_size / (1024 * 1024)  # MB
-                    
-                    if file_size > 0.1:  # Archivo válido (> 100KB)
-                        print(f"✅ VERIFICACIÓN: Nuevo archivo válido - {new_file.name} ({file_size:.2f} MB)")
-                        return True
-                    else:
-                        print(f"❌ VERIFICACIÓN: Archivo demasiado pequeño - {new_file.name} ({file_size:.2f} MB)")
-                        # Eliminar archivo corrupto
-                        try:
-                            new_file.unlink()
-                        except:
-                            pass
-                else:
-                    print(f"❌ VERIFICACIÓN: Se encontraron {len(new_files)} archivos nuevos, se esperaba 1")
-                    
-                # Si la verificación falla, continuar con el reintento
-                print("⚠️ SpotDL reportó éxito pero la verificación falló, reintentando...")
-                
-            else:
-                # Mostrar el error completo solo en el último intento
-                if attempt == max_retries - 1:
-                    print(f"\n❌ ERROR DE SPOTDL después de {max_retries} intentos:")
-                    print("=" * 50)
-                    if result.stdout:
-                        print("STDOUT:", result.stdout)
-                    if result.stderr:
-                        print("STDERR:", result.stderr)
-                    print("=" * 50)
-                else:
-                    error_summary = extract_spotdl_error(result.stderr)
-                    print(f"⚠️ Intento {attempt + 1} fallado: {error_summary}")
-                    
-                print(f"🔄 Reintentando en {retry_delay} segundos...")
-                time.sleep(retry_delay)
-                    
-        except subprocess.TimeoutExpired:
-            if attempt == max_retries - 1:
-                print("⏰ Timeout excedido después de múltiples intentos")
-                break
-            else:
-                print(f"⏰ Timeout en intento {attempt + 1}, reintentando...")
-                time.sleep(retry_delay)
-        except Exception as e:
-            if attempt == max_retries - 1:
-                logger.error(f"Error inesperado: {e}")
-                break
-            else:
-                print(f"⚠️ Error en intento {attempt + 1}: {e}, reintentando...")
-                time.sleep(retry_delay)
-    
-    # Si todos los intentos con SpotDL fallan, intentar con yt-dlp
-    print("🔄 Todos los intentos con SpotDL fallaron, probando con yt-dlp...")
-    
-    # Obtener archivos existentes antes de intentar con yt-dlp
-    existing_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
-    yt_dlp_success = download_with_yt_dlp(url, output_path, spotdl_args)
-    
-    if yt_dlp_success:
-        # Verificar también la descarga de yt-dlp
-        time.sleep(3)
-        current_files = set(output_path.glob("*.mp3")) if output_path.exists() else set()
-        new_files = current_files - existing_files
-        
-        if len(new_files) >= 1:
-            new_file = next(iter(new_files))
-            file_size = new_file.stat().st_size / (1024 * 1024)
-            if file_size > 0.1:
-                print(f"✅ VERIFICACIÓN: Descarga exitosa con yt-dlp - {new_file.name} ({file_size:.2f} MB)")
-                return True
-        
-        print("❌ yt-dlp reportó éxito pero no se encontró el archivo válido")
-        return False
-    
-    return False
 
 def read_songs_from_file(file_path):
     """Lee y valida las URLs del archivo songs-to-download.txt"""
@@ -1033,7 +771,7 @@ def download_multiple_songs(spotdl_args=None):
         print(f"\n📥 [{idx}/{len(urls)}]")
         print("--------------------------------------------------")
         try:
-            ok = download_song_with_detailed_errors(url, output_dir, spotdl_args=spotdl_args, fallback_list=fallback_downloads)
+            ok = download_song_with_detailed_errors(url, output_dir, spotdl_args=spotdl_args, fallback_list=fallback_downloads, track_number=idx)
             if ok:
                 successful += 1
                 print(f"✅ Canción {idx} descargada con éxito")
@@ -1217,12 +955,12 @@ def match_local_file_to_track(mp3_file, artist, title):
 
     # Coincidencia por título
     title_norm = normalize_song_name(title)
-    if title_norm in file_norm:
+    if title_norm and title_norm in file_norm:
         return True
 
     # Fuzzy match fuerte
     ratio = SequenceMatcher(None, file_norm, target_norm).ratio()
-    if ratio >= 0.90:
+    if ratio >= 0.85:  # Bajé el umbral para ser más flexible
         return True
 
     return False
@@ -1315,20 +1053,83 @@ def sync_spotify_playlist(spotdl_args=None):
     mp3_files = list(local_folder.glob("*.mp3"))
     assigned_files = set()
     found_matches = []
-    missing_tracks = []
+    all_tracks = []
     corrupt_files_seen = set()
 
-    print("🔎 Buscando coincidencias en la carpeta local (fase de detección)...")
-
+    # Recopilar todas las pistas
     for i, item in enumerate(tracks, start=1):
         track = item["track"]
         if not track:
             continue
-
         artist = track["artists"][0]["name"]
         title = track["name"]
         url = track["external_urls"]["spotify"]
-        track_num = i
+        all_tracks.append({
+            "index": i,
+            "artist": artist,
+            "title": title,
+            "url": url
+        })
+
+    print("🔎 Buscando coincidencias en la carpeta local (fase de detección)...")
+
+    # Crear diccionario de archivos con sus números de pista actuales
+    files_with_tracknum = {}
+    for mp3_file in mp3_files:
+        try:
+            tags = EasyID3(mp3_file)
+            current_num = tags.get("tracknumber", ["0"])[0]
+            current_clean = str(current_num).split('/')[0] if current_num else "0"
+            track_num_int = int(current_clean) if current_clean.isdigit() else 0
+            files_with_tracknum[mp3_file] = track_num_int
+        except:
+            files_with_tracknum[mp3_file] = 0
+
+    # PRIMERO: asignar archivos que tengan TRCK coincidente con posición y nombre
+    for mp3_file in mp3_files:
+        if mp3_file in assigned_files:
+            continue
+        trck = files_with_tracknum.get(mp3_file, 0)
+        if trck > 0 and trck <= len(all_tracks):
+            track_info = all_tracks[trck - 1]
+            artist = track_info["artist"]
+            title = track_info["title"]
+            if match_local_file_to_track(mp3_file, artist, title):
+                found_matches.append((mp3_file, trck, artist, title))
+                assigned_files.add(mp3_file)
+
+                # OPCIONAL: corregir WOAS si no coincide
+                has_woas = False
+                stored_url = None
+                try:
+                    tags = ID3(mp3_file)
+                    woas = tags.get("WOAS")
+                    if woas:
+                        has_woas = True
+                        stored_url = woas.url.strip()
+                except:
+                    pass
+
+                if has_woas:
+                    stored_id = extract_track_id(stored_url)
+                    expected_id = extract_track_id(track_info["url"])
+                    if stored_id != expected_id:
+                        try:
+                            tags = ID3(mp3_file)
+                            tags.delall("WOAS")
+                            normalized_url = normalize_spotify_url(track_info["url"])
+                            tags.add(WOAS(encoding=3, url=normalized_url))
+                            tags.save()
+                            print(f"🔧 WOAS actualizado en {mp3_file.name}")
+                        except:
+                            pass
+
+    # SEGUNDO: asignar pistas restantes por coincidencia de nombre
+    for track_info in all_tracks:
+        track_num = track_info["index"]
+        artist = track_info["artist"]
+        title = track_info["title"]
+        url = track_info["url"]
 
         matched = False
 
@@ -1336,66 +1137,43 @@ def sync_spotify_playlist(spotdl_args=None):
             if mp3_file in assigned_files:
                 continue
 
-            # Detectar si tiene WOAS
-            has_woas = False
-            stored_url = None
-
-            try:
-                tags = ID3(mp3_file)
-                woas = tags.get("WOAS")
-                if woas:
-                    has_woas = True
-                    stored_url = woas.url.strip()
-            except:
-                pass
-
-            # === PRIMERA REGLA: SI NOMBRE COINCIDE ===
+            # === SOLO COINCIDENCIA POR NOMBRE ===
             if match_local_file_to_track(mp3_file, artist, title):
+                found_matches.append((mp3_file, track_num, artist, title))
+                assigned_files.add(mp3_file)
+                matched = True
 
-                # SIN WOAS → match directo
-                if not has_woas:
-                    found_matches.append((mp3_file, track_num, artist, title))
-                    assigned_files.add(mp3_file)
-                    matched = True
-                    break
+                # OPCIONAL: corregir WOAS si no coincide
+                has_woas = False
+                stored_url = None
+                try:
+                    tags = ID3(mp3_file)
+                    woas = tags.get("WOAS")
+                    if woas:
+                        has_woas = True
+                        stored_url = woas.url.strip()
+                except:
+                    pass
 
-                # CON WOAS → comparar IDs
-                stored_id = extract_track_id(stored_url)
-                expected_id = extract_track_id(url)
+                if has_woas:
+                    stored_id = extract_track_id(stored_url)
+                    expected_id = extract_track_id(url)
+                    if stored_id != expected_id:
+                        try:
+                            tags = ID3(mp3_file)
+                            tags.delall("WOAS")
+                            normalized_url = normalize_spotify_url(url)
+                            tags.add(WOAS(encoding=3, url=normalized_url))
+                            tags.save()
+                            print(f"🔧 WOAS actualizado en {mp3_file.name}")
+                        except:
+                            pass
 
-                if stored_id == expected_id:
-                    # Archivo CORRECTO
-                    found_matches.append((mp3_file, track_num, artist, title))
-                    assigned_files.add(mp3_file)
-                    matched = True
-                    break
+                break
 
-                else:
-                    # Archivo coincide por nombre pero tiene WOAS de otra canción
-                    if mp3_file not in corrupt_files_seen:
-                        print(f"⚠️ {mp3_file.name} coincide por nombre pero WOAS no coincide → se re-descargará.")
-                        corrupt_files_seen.add(mp3_file)
-
-                        missing_tracks.append({
-                            "index": track_num,
-                            "artist": artist,
-                            "title": title,
-                            "url": url,
-                            "force_redownload": True,
-                            "bad_file": mp3_file
-                        })
-
-                    assigned_files.add(mp3_file)
-                    matched = True
-                    break
-
-        if not matched:
-            missing_tracks.append({
-                "index": track_num,
-                "artist": artist,
-                "title": title,
-                "url": url
-            })
+    # Calcular pistas faltantes
+    assigned_track_nums = {track_num for _, track_num, _, _ in found_matches}
+    missing_tracks = [t for t in all_tracks if t["index"] not in assigned_track_nums]
 
     # --- FASE 2: ACTUALIZACIÓN DE METADATOS ---
     print("\n🛠️ Actualizando metadatos (fase de actualización)...")
@@ -1532,7 +1310,17 @@ def sync_spotify_playlist(spotdl_args=None):
 
                         if chosen_file is None:
                             chosen_file = max(new_files, key=lambda x: x.stat().st_mtime)
+                    else:
+                        # Si no hay archivos nuevos, buscar el archivo existente que coincida
+                        target_norm = normalize_song_name(f"{m['artist']} {m['title']}")
+                        best_ratio = 0.0
+                        for cf in current_files:
+                            ratio = SequenceMatcher(None, normalize_song_name(cf.stem), target_norm).ratio()
+                            if ratio > best_ratio:
+                                best_ratio = ratio
+                                chosen_file = cf
 
+                    if chosen_file:
                         try:
                             tags = EasyID3(chosen_file)
                         except:
@@ -1545,7 +1333,7 @@ def sync_spotify_playlist(spotdl_args=None):
                         except Exception as e:
                             print(f"⚠️ No se pudo escribir tag en {chosen_file.name}: {e}")
 
-                        existing_before = set(current_files)
+                    existing_before = set(current_files)
 
             print("\n🎉 Sincronización completada (descargas procesadas).")
 
@@ -1592,10 +1380,14 @@ def normalize_song_name(name: str) -> str:
     - Convierte a minúsculas
     - Reemplaza guiones, paréntesis y símbolos por espacios
     - Elimina palabras vacías comunes (feat, remix, official, etc.)
+    - Elimina "feat" y lo que sigue
     """
     name = re.sub(r'[<>:"/\\|?*]', '', name)  # eliminar caracteres ilegales
     name = re.sub(r'[\(\)\[\]\{\}_\-\+]', ' ', name)  # reemplazar separadores
     name = re.sub(r'\s+', ' ', name).strip().lower()  # espacios y minúsculas
+    
+    # eliminar "feat" y lo que sigue
+    name = re.sub(r'\b(?:feat|ft|with)\b.*', '', name, flags=re.IGNORECASE)
     
     # eliminar palabras accesorias típicas
     stopwords = ['feat', 'ft', 'remix', 'version', 'official', 'audio', 'video', 'explicit']
@@ -1646,16 +1438,6 @@ def is_matching_song(filename_stem, artist, title, threshold=0.82):
     ratio = SequenceMatcher(None, normalized_file, normalized_target).ratio()
     return ratio >= threshold
 
-def match_by_spotify_id(mp3_file, spotify_url):
-    """Devuelve True si el MP3 contiene el tag WOAS y coincide con la URL original de Spotify."""
-    try:
-        tags = ID3(mp3_file)
-        if "WOAS" in tags:
-            return tags["WOAS"].url == spotify_url
-    except:
-        pass
-    return False
-
 def match_by_tracknumber_and_artist(mp3_file, track_num, artist):
     """
     Coincidencia secundaria para archivos descargados SIN WOAS.
@@ -1688,12 +1470,94 @@ def match_by_tracknumber_and_artist(mp3_file, track_num, artist):
 
     return artist_clean in filename
 
+def check_and_update_libraries():
+    """Comprueba si spotdl y yt-dlp están actualizados y ofrece actualizarlos"""
+    print("\n🔍 Comprobando versiones de librerías...")
+    
+    # Comprobar versiones instaladas
+    try:
+        spotdl_result = subprocess.run(["spotdl", "--version"], capture_output=True, text=True, timeout=10)
+        if spotdl_result.returncode == 0:
+            spotdl_version = spotdl_result.stdout.strip()
+            print(f"✅ SpotDL versión instalada: {spotdl_version}")
+        else:
+            print("❌ Error obteniendo versión de SpotDL")
+            spotdl_version = None
+    except Exception as e:
+        print(f"❌ Error obteniendo versión de SpotDL: {e}")
+        spotdl_version = None
+    
+    try:
+        ytdlp_result = subprocess.run(["yt-dlp", "--version"], capture_output=True, text=True, timeout=10)
+        if ytdlp_result.returncode == 0:
+            ytdlp_version = ytdlp_result.stdout.strip()
+            print(f"✅ yt-dlp versión instalada: {ytdlp_version}")
+        else:
+            print("❌ Error obteniendo versión de yt-dlp")
+            ytdlp_version = None
+    except Exception as e:
+        print(f"❌ Error obteniendo versión de yt-dlp: {e}")
+        ytdlp_version = None
+    
+    # Comprobar si hay actualizaciones disponibles
+    try:
+        outdated_result = subprocess.run([sys.executable, "-m", "pip", "list", "--outdated"], capture_output=True, text=True, timeout=30)
+        outdated_packages = outdated_result.stdout
+        spotdl_outdated = "spotdl" in outdated_packages.lower()
+        ytdlp_outdated = "yt-dlp" in outdated_packages.lower()
+    except Exception as e:
+        print(f"❌ Error comprobando actualizaciones: {e}")
+        spotdl_outdated = False
+        ytdlp_outdated = False
+    
+    if spotdl_outdated:
+        print("⚠️ SpotDL tiene una versión más reciente disponible.")
+    else:
+        print("✅ SpotDL está actualizado.")
+    
+    if ytdlp_outdated:
+        print("⚠️ yt-dlp tiene una versión más reciente disponible.")
+    else:
+        print("✅ yt-dlp está actualizado.")
+    
+    # Preguntar si actualizar
+    if spotdl_outdated or ytdlp_outdated:
+        while True:
+            respuesta = input("\n¿Quieres actualizar las librerías desactualizadas? (s/n): ").strip().lower()
+            if respuesta == "s" or respuesta == "si":
+                print("\n🔄 Actualizando librerías...")
+                if spotdl_outdated:
+                    print("Actualizando SpotDL...")
+                    try:
+                        update_result = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "git+https://github.com/spotDL/spotify-downloader.git"], timeout=300)
+                        if update_result.returncode == 0:
+                            print("✅ SpotDL actualizado correctamente.")
+                        else:
+                            print("❌ Error actualizando SpotDL.")
+                    except Exception as e:
+                        print(f"❌ Error actualizando SpotDL: {e}")
+                
+                if ytdlp_outdated:
+                    print("Actualizando yt-dlp...")
+                    try:
+                        update_result = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], timeout=300)
+                        if update_result.returncode == 0:
+                            print("✅ yt-dlp actualizado correctamente.")
+                        else:
+                            print("❌ Error actualizando yt-dlp.")
+                    except Exception as e:
+                        print(f"❌ Error actualizando yt-dlp: {e}")
+                break
+            elif respuesta == "n" or respuesta == "no":
+                print("Actualización cancelada.")
+                break
+            else:
+                print("Por favor, responde 's' o 'n'.")
+    else:
+        print("\n🎉 Todas las librerías están actualizadas.")
+
 def main_menu():
     """Menú principal de la aplicación"""
-    if not check_spotdl_installation():
-        if not install_spotdl():
-            print("📦 Usando yt-dlp como alternativa principal...")
-    
     create_credentials_file()
     create_songs_template_file()
     
@@ -1705,9 +1569,10 @@ def main_menu():
         print("2. Descargar múltiples canciones desde archivo")
         print("3. Exportar playlist a archivo")
         print("4. Sincronizar playlist local con Spotify")
-        print("5. Salir")
+        print("5. Comprobar y actualizar librerías")
+        print("6. Salir")
         
-        opcion = input("\nElige una opción (1, 2, 3, 4 o 5): ").strip()
+        opcion = input("\nElige una opción (1, 2, 3, 4, 5 o 6): ").strip()
         
         if opcion == "1":
             download_single_song()
@@ -1720,6 +1585,8 @@ def main_menu():
             spotdl_args = get_spotdl_credentials()
             sync_spotify_playlist(spotdl_args)
         elif opcion == "5":
+            check_and_update_libraries()
+        elif opcion == "6":
             print("👋 ¡Hasta luego!")
             break
         else:
