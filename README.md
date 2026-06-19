@@ -7,6 +7,8 @@
 
 > Python tool for managing Spotify playlists, synchronizing local music folders, and maintaining ID3 metadata consistency.
 
+> The program supports both English and Spanish. You can select the interface language when starting the tool.
+
 ## 📋 Table of Contents
 
 * [✨ Features](#-features)
@@ -14,6 +16,7 @@
 * [🧠 Technical Highlights](#-technical-highlights)
 * [🚀 Installation](#-installation)
 * [⚙️ Configuration](#️-configuration)
+* [🌐 Language Selection](#-language-selection)
 * [📖 Usage](#-usage)
 * [🎯 Examples](#-examples)
 * [🔍 Troubleshooting](#-troubleshooting)
@@ -106,6 +109,25 @@ When running a feature that requires Spotify access, the program may ask you to 
 
 Run the program and select the credential option. The program will guide you through the process.
 
+## 🌐 Language Selection
+
+SpotPSync Tool supports both English and Spanish.
+
+When the program starts, it asks you to choose the interface language:
+
+```text
+==================================================
+🌐 Language / Idioma
+==================================================
+1. Español
+2. English
+
+Choose language / Elige idioma (1 or 2):
+```
+
+After selecting the language, all main menus, prompts, and status messages will be displayed in the selected language.
+
+
 ## 📖 Usage
 
 ### Run the program
@@ -113,6 +135,8 @@ Run the program and select the credential option. The program will guide you thr
 ```bash
 python spotpsync.py
 ```
+
+When running the program, you will first be asked to select the interface language. After that, the main menu will be displayed.
 
 ### Main Menu
 
