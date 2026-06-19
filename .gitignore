@@ -1,0 +1,7 @@
+spotify_client_data.txt
+downloads/
+downloads*/
+*.mp3
+log.txt
+__pycache__/
+*.pyc
