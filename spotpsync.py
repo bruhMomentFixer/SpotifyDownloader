@@ -1,3 +1,4 @@
+import builtins
 import json
 import logging
 import re
@@ -31,6 +32,245 @@ PLACEHOLDER_CREDENTIALS = {
     "YOUR_CLIENT_ID_HERE",
     "YOUR_CLIENT_SECRET_HERE",
 }
+
+
+# -----------------------------------------------------------------------------
+# Internationalization
+# -----------------------------------------------------------------------------
+
+LANG = "es"
+
+EN_TEXT = {
+    "Error desconocido (sin salida de error)": "Unknown error (no error output)",
+    "Error desconocido": "Unknown error",
+    "🔐 CONFIGURACIÓN DE CREDENCIALES": "🔐 CREDENTIAL CONFIGURATION",
+    "1. Usar credenciales del archivo 'spotify_client_data.txt'": "1. Use credentials from 'spotify_client_data.txt'",
+    "2. Usar credenciales por defecto de spotdl": "2. Use spotdl default credentials",
+    "3. Ingresar credenciales manualmente": "3. Enter credentials manually",
+    "\nElige una opción (1, 2 o 3): ": "\nChoose an option (1, 2 or 3): ",
+    "✅ Usando credenciales del archivo": "✅ Using credentials from file",
+    "❌ No se encontraron credenciales válidas en el archivo": "❌ No valid credentials were found in the file",
+    "✅ Usando credenciales por defecto de spotdl": "✅ Using spotdl default credentials",
+    "Introduce tu Spotify Client ID: ": "Enter your Spotify Client ID: ",
+    "Introduce tu Spotify Client Secret: ": "Enter your Spotify Client Secret: ",
+    "✅ Usando credenciales manuales": "✅ Using manually entered credentials",
+    "❌ Credenciales inválidas": "❌ Invalid credentials",
+    "❌ Opción no válida": "❌ Invalid option",
+    "🔐 CREDENCIALES DE SPOTIFY DEVELOPER": "🔐 SPOTIFY DEVELOPER CREDENTIALS",
+    "Esta función requiere credenciales propias de Spotify Developer.": "This feature requires your own Spotify Developer credentials.",
+    "2. Ingresar credenciales manualmente": "2. Enter credentials manually",
+    "3. Cancelar": "3. Cancel",
+    "❌ Operación cancelada": "❌ Operation cancelled",
+    "🔄 Intentando con yt-dlp como alternativa...": "🔄 Trying yt-dlp as fallback...",
+    "❌ No se encontraron resultados en YouTube.": "❌ No YouTube results were found.",
+    "❌ yt-dlp no generó ningún archivo MP3.": "❌ yt-dlp did not generate any MP3 file.",
+    "❌ El archivo generado es demasiado pequeño, probablemente corrupto.": "❌ The generated file is too small and probably corrupted.",
+    "⚠️ spotDL reportó éxito pero la verificación falló, reintentando...": "⚠️ spotDL reported success, but verification failed. Retrying...",
+    "🔄 Todos los intentos con spotDL fallaron, usando yt-dlp...": "🔄 All spotDL attempts failed. Using yt-dlp...",
+    "❌ Falló incluso con yt-dlp": "❌ Failed even with yt-dlp",
+    "🎵 PROCESAR CANCIÓN INDIVIDUAL": "🎵 PROCESS SINGLE TRACK",
+    "Introduce la URL de la canción de Spotify: ": "Enter the Spotify track URL: ",
+    "❌ URL inválida.": "❌ Invalid URL.",
+    "\n🎉 Procesamiento completado con éxito": "\n🎉 Processing completed successfully",
+    "\n⚠️ Pistas procesadas con yt-dlp; verifícalas manualmente:": "\n⚠️ Tracks processed with yt-dlp; verify them manually:",
+    "\n💥 El procesamiento falló": "\n💥 Processing failed",
+    "❌ URLs inválidas encontradas:": "❌ Invalid URLs found:",
+    "❌ No se encontraron URLs válidas en el archivo": "❌ No valid URLs were found in the file",
+    "📊 RESUMEN DE PROCESAMIENTO": "📊 PROCESSING SUMMARY",
+    "🔎 Obteniendo metadata de playlist mediante spotDL...": "🔎 Getting playlist metadata using spotDL...",
+    "¿Qué deseas hacer?": "What do you want to do?",
+    "1. Sobrescribir el archivo": "1. Overwrite the file",
+    "2. Añadir al final del archivo": "2. Append to the end of the file",
+    "📋 EXPORTAR PLAYLIST A ARCHIVO": "📋 EXPORT PLAYLIST TO FILE",
+    "Introduce la URL de la playlist de Spotify: ": "Enter the Spotify playlist URL: ",
+    "❌ URL inválida. Debe ser una playlist de Spotify.": "❌ Invalid URL. It must be a Spotify playlist.",
+    "\n❌ Error al obtener la playlist:": "\n❌ Error getting the playlist:",
+    "❌ No se encontraron canciones en la playlist": "❌ No tracks were found in the playlist",
+    "\n🎉 Playlist exportada correctamente": "\n🎉 Playlist exported successfully",
+    "❌ Error exportando la playlist": "❌ Error exporting the playlist",
+    "🔄 SINCRONIZAR PLAYLIST DE SPOTIFY": "🔄 SYNCHRONIZE SPOTIFY PLAYLIST",
+    "Introduce la ruta de la carpeta local de la playlist: ": "Enter the local playlist folder path: ",
+    "❌ No se pudo extraer el ID de la playlist.": "❌ Could not extract the playlist ID.",
+    "📡 Obteniendo información de la playlist...": "📡 Getting playlist information...",
+    "⚠️ El nombre de la carpeta no coincide con el nombre de la playlist.": "⚠️ The folder name does not match the playlist name.",
+    "¿Quieres renombrar la carpeta automáticamente? (s/n): ": "Do you want to automatically rename the folder? (y/n): ",
+    "¿Quieres crear una carpeta nueva para esta playlist y usarla? (s/n): ": "Do you want to create a new folder for this playlist and use it? (y/n): ",
+    "↩️ Operación cancelada. Volviendo al menú principal.": "↩️ Operation cancelled. Returning to the main menu.",
+    "🔎 Buscando coincidencias en la carpeta local...": "🔎 Searching for matches in the local folder...",
+    "\n🛠️ Actualizando metadatos...": "\n🛠️ Updating metadata...",
+    "📊 RESULTADO DE DETECCIÓN / ACTUALIZACIÓN": "📊 DETECTION / UPDATE RESULT",
+    "\n📝 Cambios realizados:": "\n📝 Changes made:",
+    "¿Deseas BORRAR estos archivos extra? (s/n): ": "Do you want to DELETE these extra files? (y/n): ",
+    "ℹ️ No se borraron archivos extra.": "ℹ️ Extra files were not deleted.",
+    "\n✅ No hay archivos extra.": "\n✅ There are no extra files.",
+    "\n✅ Todas las canciones están sincronizadas.": "\n✅ All tracks are synchronized.",
+    "\n🎵 Canciones faltantes:": "\n🎵 Missing tracks:",
+    "\n¿Deseas procesar las canciones faltantes? (s/n): ": "\nDo you want to process the missing tracks? (y/n): ",
+    "\nℹ️ Procesamiento omitido por el usuario.": "\nℹ️ Processing skipped by user.",
+    "\n⬇️ Procesando canciones faltantes...\n": "\n⬇️ Processing missing tracks...\n",
+    "\n🎉 Sincronización completada.": "\n🎉 Synchronization completed.",
+    "\n🔍 Comprobando versiones de dependencias...": "\n🔍 Checking dependency versions...",
+    "⚠️ spotDL tiene una versión más reciente disponible.": "⚠️ A newer version of spotDL is available.",
+    "✅ spotDL está actualizado.": "✅ spotDL is up to date.",
+    "⚠️ yt-dlp tiene una versión más reciente disponible.": "⚠️ A newer version of yt-dlp is available.",
+    "✅ yt-dlp está actualizado.": "✅ yt-dlp is up to date.",
+    "\n🎉 Todas las dependencias están actualizadas.": "\n🎉 All dependencies are up to date.",
+    "\n¿Quieres actualizar las dependencias desactualizadas? (s/n): ": "\nDo you want to update outdated dependencies? (y/n): ",
+    "Actualizando spotDL...": "Updating spotDL...",
+    "Actualizando yt-dlp...": "Updating yt-dlp...",
+    "Actualización cancelada.": "Update cancelled.",
+    "Por favor, responde 's' o 'n'.": "Please answer 'y' or 'n'.",
+    "1. Procesar una canción individual": "1. Process a single track",
+    "2. Procesar múltiples canciones desde archivo": "2. Process multiple tracks from file",
+    "3. Exportar playlist a archivo": "3. Export playlist to file",
+    "4. Sincronizar playlist local con Spotify": "4. Synchronize local playlist with Spotify",
+    "5. Comprobar y actualizar dependencias": "5. Check and update dependencies",
+    "6. Salir": "6. Exit",
+    "\nElige una opción (1, 2, 3, 4, 5 o 6): ": "\nChoose an option (1, 2, 3, 4, 5 or 6): ",
+    "👋 Hasta luego": "👋 Goodbye",
+    "\nPresiona Enter para continuar...": "\nPress Enter to continue...",
+    "\n⏹️ Programa cancelado por el usuario": "\n⏹️ Program cancelled by user",
+    "\nPrograma terminado": "\nProgram finished",
+}
+
+
+def translate_text(text: str) -> str:
+    """Translates user-facing text at runtime when English mode is selected."""
+    if LANG != "en":
+        return text
+
+    if text in EN_TEXT:
+        return EN_TEXT[text]
+
+    # Dynamic message patterns.
+    replacements = [
+        (r"^🔍 Buscando en YouTube: (.+)$", r"🔍 Searching on YouTube: \1"),
+        (r"^🏆 Mejor coincidencia: (.+)$", r"🏆 Best match: \1"),
+        (r"^🔗 URL seleccionada: (.+)$", r"🔗 Selected URL: \1"),
+        (r"^❌ Error ejecutando yt-dlp: (.+)$", r"❌ Error running yt-dlp: \1"),
+        (r"^✅ Procesamiento alternativo completado: (.+)$", r"✅ Fallback processing completed: \1"),
+        (r"^❌ Error en el procesamiento con yt-dlp: (.+)$", r"❌ Error during yt-dlp processing: \1"),
+        (r"^🎵 Procesando: (.+)$", r"🎵 Processing: \1"),
+        (r"^🎵 Procesando URL: (.+)$", r"🎵 Processing URL: \1"),
+        (r"^📁 Archivo esperado: (.+)$", r"📁 Expected file: \1"),
+        (r"^⏳ Ejecutando spotDL \(intento (.+)\)$", r"⏳ Running spotDL (attempt \1)"),
+        (r"^✅ Procesamiento correcto con spotDL: (.+)$", r"✅ Correctly processed with spotDL: \1"),
+        (r"^🏷️ Metadato TRCK actualizado a (.+)$", r"🏷️ TRCK metadata updated to \1"),
+        (r"^⚠️ No se pudo actualizar TRCK: (.+)$", r"⚠️ Could not update TRCK: \1"),
+        (r"^⚠️ Error spotDL: (.+)$", r"⚠️ spotDL error: \1"),
+        (r"^⏰ Timeout \(intento (.+)\), reintentando\.\.\.$", r"⏰ Timeout (attempt \1), retrying..."),
+        (r"^⚠️ Error inesperado: (.+)$", r"⚠️ Unexpected error: \1"),
+        (r"^ℹ️ El archivo correcto ya existe: (.+)$", r"ℹ️ The correct file already exists: \1"),
+        (r"^✅ Archivo renombrado a: (.+)$", r"✅ File renamed to: \1"),
+        (r"^⚠️ No se pudo renombrar el archivo: (.+)$", r"⚠️ Could not rename the file: \1"),
+        (r"^📋 Añadida a la lista de verificación manual: (.+)$", r"📋 Added to the manual verification list: \1"),
+        (r"^🔧 URL normalizada: (.+)$", r"🔧 Normalized URL: \1"),
+        (r"^📥 Procesando: (.+)$", r"📥 Processing: \1"),
+        (r"^📁 Carpeta de destino: (.+)$", r"📁 Destination folder: \1"),
+        (r"^❌ El archivo (.+) no existe$", r"❌ The file \1 does not exist"),
+        (r"^⚠️ URL duplicada en línea (.+)$", r"⚠️ Duplicate URL on line \1"),
+        (r"^   Línea (.+)$", r"   Line \1"),
+        (r"^✅ Se encontraron (\d+) URLs válidas$", r"✅ Found \1 valid URLs"),
+        (r"^❌ Error leyendo el archivo: (.+)$", r"❌ Error reading the file: \1"),
+        (r"^🎵 Iniciando procesamiento de (\d+) canciones en la carpeta: (.+)$", r"🎵 Starting processing of \1 tracks in folder: \2"),
+        (r"^✅ Canción (\d+) procesada con éxito$", r"✅ Track \1 processed successfully"),
+        (r"^❌ Canción (\d+) falló$", r"❌ Track \1 failed"),
+        (r"^💥 Error en la canción (\d+): (.+)$", r"💥 Error on track \1: \2"),
+        (r"^• Total de canciones: (.+)$", r"• Total tracks: \1"),
+        (r"^• Procesadas correctamente: (.+)$", r"• Successfully processed: \1"),
+        (r"^• Fallidas: (.+)$", r"• Failed: \1"),
+        (r"^✅ Se encontraron (\d+) canciones en la playlist$", r"✅ Found \1 tracks in the playlist"),
+        (r"^⚠️ El archivo (.+) ya contiene (\d+) líneas$", r"⚠️ The file \1 already contains \2 lines"),
+        (r"^✅ Archivo (.+) con (\d+) URLs$", r"✅ File \1 with \2 URLs"),
+        (r"^❌ Error guardando las URLs: (.+)$", r"❌ Error saving URLs: \1"),
+        (r"^🔗 URL de playlist: (.+)$", r"🔗 Playlist URL: \1"),
+        (r"^📁 Archivo: (.+)$", r"📁 File: \1"),
+        (r"^🎵 Canciones: (.+)$", r"🎵 Tracks: \1"),
+        (r"^🔧 WOAS actualizado en (.+)$", r"🔧 WOAS updated in \1"),
+        (r"^❌ La carpeta (.+) no existe\.$", r"❌ The folder \1 does not exist."),
+        (r"^❌ Error obteniendo información de la playlist: (.+)$", r"❌ Error getting playlist information: \1"),
+        (r"^🎧 Playlist con (\d+) canciones encontradas$", r"🎧 Playlist with \1 tracks found"),
+        (r"^   Carpeta actual : (.+)$", r"   Current folder: \1"),
+        (r"^   Playlist nombre: (.+)$", r"   Playlist name: \1"),
+        (r"^✅ Carpeta renombrada a: (.+)$", r"✅ Folder renamed to: \1"),
+        (r"^❌ Error renombrando carpeta: (.+)$", r"❌ Error renaming folder: \1"),
+        (r"^📁 Carpeta creada: (.+)$", r"📁 Folder created: \1"),
+        (r"^❌ No se pudo crear la carpeta: (.+)$", r"❌ Could not create the folder: \1"),
+        (r"^✅ (.+) → pista #(\d+) \(ya correcta\)$", r"✅ \1 → track #\2 (already correct)"),
+        (r"^🛠️ (.+) → pista actualizada (.+) → (.+)$", r"🛠️ \1 → track updated \2 → \3"),
+        (r"^⚠️ No se pudo actualizar metadatos en (.+): (.+)$", r"⚠️ Could not update metadata in \1: \2"),
+        (r"^• Canciones en playlist: (.+)$", r"• Tracks in playlist: \1"),
+        (r"^• Canciones encontradas en carpeta: (.+)$", r"• Tracks found in folder: \1"),
+        (r"^• Números de pista correctos: (.+)$", r"• Correct track numbers: \1"),
+        (r"^• Números de pista actualizados: (.+)$", r"• Updated track numbers: \1"),
+        (r"^• Canciones faltantes: (.+)$", r"• Missing tracks: \1"),
+        (r"^⚠️ Se encontraron (\d+) archivos no pertenecientes a la playlist:$", r"⚠️ Found \1 files that do not belong to the playlist:"),
+        (r"^🗑️ Borrado: (.+)$", r"🗑️ Deleted: \1"),
+        (r"^❌ No se pudo borrar (.+): (.+)$", r"❌ Could not delete \1: \2"),
+        (r"^✅ Metadato de pista actualizado para (.+)$", r"✅ Track metadata updated for \1"),
+        (r"^⚠️ No se pudo escribir tag en (.+): (.+)$", r"⚠️ Could not write tag in \1: \2"),
+        (r"^📄 Archivo '(.+)' creado$", r"📄 File '\1' created"),
+        (r"^📄 Archivo '(.+)' creado con ejemplo$", r"📄 File '\1' created with example content"),
+        (r"^✅ (.+) versión instalada: (.+)$", r"✅ Installed \1 version: \2"),
+        (r"^❌ Error obteniendo versión de (.+)$", r"❌ Error getting \1 version"),
+        (r"^❌ Error obteniendo versión de (.+): (.+)$", r"❌ Error getting \1 version: \2"),
+        (r"^❌ Error comprobando actualizaciones: (.+)$", r"❌ Error checking updates: \1"),
+    ]
+
+    for pattern, replacement in replacements:
+        if re.search(pattern, text):
+            return re.sub(pattern, replacement, text)
+
+    return text
+
+
+def print(*args, **kwargs):  # type: ignore[override]
+    translated_args = [translate_text(arg) if isinstance(arg, str) else arg for arg in args]
+    builtins.print(*translated_args, **kwargs)
+
+
+def input(prompt: str = "") -> str:  # type: ignore[override]
+    translated_prompt = translate_text(prompt)
+    response = builtins.input(translated_prompt)
+
+    if LANG == "en" and "(y/n)" in translated_prompt.lower():
+        normalized = response.strip().lower()
+        if normalized in {"y", "yes"}:
+            return "s"
+        if normalized in {"n", "no"}:
+            return "n"
+
+    return response
+
+
+def select_language() -> None:
+    """Lets the user select the interface language at startup."""
+    global LANG
+
+    if "--lang" in sys.argv:
+        try:
+            lang_arg = sys.argv[sys.argv.index("--lang") + 1].strip().lower()
+            if lang_arg in {"es", "en"}:
+                LANG = lang_arg
+                return
+        except (IndexError, ValueError):
+            pass
+
+    builtins.print("\n" + "=" * 50)
+    builtins.print("🌐 Language / Idioma")
+    builtins.print("=" * 50)
+    builtins.print("1. Español")
+    builtins.print("2. English")
+
+    while True:
+        choice = builtins.input("\nChoose language / Elige idioma (1 or 2): ").strip()
+        if choice == "1":
+            LANG = "es"
+            return
+        if choice == "2":
+            LANG = "en"
+            return
+        builtins.print("❌ Invalid option / Opción no válida")
 
 
 # -----------------------------------------------------------------------------
@@ -1198,7 +1438,7 @@ def create_credentials_file() -> None:
     if CREDENTIALS_FILE.exists():
         return
 
-    CREDENTIALS_FILE.write_text("TU_CLIENT_ID_AQUI\nTU_CLIENT_SECRET_AQUI\n", encoding="utf-8")
+    CREDENTIALS_FILE.write_text("YOUR_CLIENT_ID_HERE\nYOUR_CLIENT_SECRET_HERE\n", encoding="utf-8")
     print(f"📄 Archivo '{CREDENTIALS_FILE.name}' creado")
 
 
@@ -1206,7 +1446,19 @@ def create_track_list_template_file() -> None:
     if TRACK_LIST_FILE.exists():
         return
 
-    example_content = """# Archivo spotify-track-list.txt
+    if LANG == "en":
+        example_content = """# spotify-track-list.txt
+# Place one Spotify track URL per line.
+# Lines starting with # are comments.
+
+https://open.spotify.com/track/4vIQ62JoGRy7tDy24hiqrF
+https://open.spotify.com/track/6T7FX1XaXoh1oGpt4QrP8l
+https://open.spotify.com/track/0B7c7s1qumVfKVSJhQbq1L
+
+# More tracks...
+"""
+    else:
+        example_content = """# Archivo spotify-track-list.txt
 # Coloca una URL de Spotify por línea.
 # Las líneas que comienzan con # son comentarios.
 
@@ -1279,6 +1531,7 @@ def check_and_update_dependencies() -> None:
 
 
 def main_menu() -> None:
+    select_language()
     create_credentials_file()
     create_track_list_template_file()
 
