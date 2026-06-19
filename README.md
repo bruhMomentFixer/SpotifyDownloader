@@ -127,7 +127,6 @@ Choose language / Elige idioma (1 or 2):
 
 After selecting the language, all main menus, prompts, and status messages will be displayed in the selected language.
 
-
 ## 📖 Usage
 
 ### Run the program
