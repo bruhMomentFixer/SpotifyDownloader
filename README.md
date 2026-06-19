@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/bruhMomentFixer/SpotifyDownloader?style=social)](https://github.com/yourusername/SpotifyDownloader)
+[![GitHub Stars](https://img.shields.io/github/stars/bruhMomentFixer/SpotifyDownloader?style=social)](https://github.com/bruhMomentFixer/SpotifyDownloader)
 
 > **Descarga música de Spotify de forma fácil y organizada.** Un script Python avanzado que sincroniza playlists, descarga canciones individuales y mantiene tus metadatos ID3 actualizados. ¡Compatible con spotdl y yt-dlp para máxima fiabilidad!
 
