@@ -1,17 +1,15 @@
-﻿# 🎵 Spotify Downloader Pro (SDPro)
+# 🎵 Spotify Playlist Synchronization Tool (SpotPSync Tool)
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/bruhMomentFixer/SpotifyDownloader?style=social)](https://github.com/bruhMomentFixer/SpotifyDownloader)
+[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
-> **Descarga música de Spotify de forma fácil y organizada.** Un script Python avanzado que sincroniza playlists, descarga canciones individuales y mantiene tus metadatos ID3 actualizados. ¡Compatible con spotdl y yt-dlp para máxima fiabilidad!
-
-<!-- ![Demo](https://via.placeholder.com/800x400?text=Demo+del+Programa)  Reemplaza con una imagen real si tienes -->
+> Herramienta en Python para gestionar playlists de Spotify, sincronizar carpetas locales de música y mantener la consistencia de metadatos ID3.
 
 ## 📋 Tabla de Contenidos
 
 - [✨ Características](#-características)
 - [🔧 Requisitos](#-requisitos)
+- [🧠 Aspectos técnicos](#-aspectos-técnicos)
 - [🚀 Instalación](#-instalación)
 - [⚙️ Configuración](#️-configuración)
 - [📖 Uso](#-uso)
@@ -22,28 +20,39 @@
 
 ## ✨ Características
 
-- 🎶 **Descarga individual**: Canciones, playlists o álbumes desde URLs de Spotify.
+- 🎶 **Procesamiento de canciones**: Procesa URLs individuales de canciones de Spotify.
 - 🔄 **Sincronización automática**: Mantén tu carpeta local sincronizada con playlists de Spotify.
 - 🏷️ **Metadatos ID3**: Actualiza automáticamente números de pista, ISRC y URLs de Spotify.
-- 🎚️ **Múltiples fuentes**: Usa spotdl o yt-dlp como respaldo para descargas fallidas.
+- 🎚️ **Mecanismo de respaldo**: Integra `spotdl` y `yt-dlp` como alternativas cuando el procesamiento principal falla.
 - 📁 **Organización**: Crea carpetas automáticamente basadas en el nombre de la playlist.
 - 🔍 **Detección inteligente**: Encuentra archivos existentes y evita duplicados.
 - 🌐 **Soporte multiidioma**: Maneja acentos, símbolos y caracteres especiales.
-- ⚡ **Rápido y eficiente**: Optimizado para grandes playlists.
+- ⚡ **Procesamiento de playlists grandes**: Diseñado para trabajar con playlists extensas y evitar duplicados.
 
 ## 🔧 Requisitos
 
 - **Python**: Versión 3.8 o superior.
-- **Librerías**: `spotipy`, `mutagen`, `yt-dlp`, `spotdl`.
-- **Cuenta de Spotify**: Necesaria para acceder a la API (gratuita).
-- **Sistema operativo**: Windows, macOS o Linux.
+- **Dependencias**: `spotipy`, `mutagen`, `yt-dlp`, `spotdl`.
+- **Credenciales de Spotify Developer**: opcionales, pero recomendadas para evitar limitaciones de uso y mejorar la compatibilidad con la Spotify Web API.
+- **Sistema operativo**: Windows, Linux o macOS.
+
+## 🧠 Aspectos técnicos
+
+- Integración con Spotify Web API mediante `spotipy`.
+- Gestión de metadatos ID3 mediante `mutagen`.
+- Sincronización entre playlists de Spotify y carpetas locales.
+- Normalización de nombres de archivo, acentos y caracteres especiales.
+- Detección de duplicados y archivos no pertenecientes a la playlist.
+- Lógica de reintentos, verificación de resultados y manejo de errores.
+- Gestión de rutas multiplataforma mediante `pathlib`.
+- Integración con herramientas externas como `spotdl` y `yt-dlp`.
 
 ## 🚀 Instalación
 
 ### 1. Clona el repositorio
 ```bash
-git clone https://github.com/yourusername/SpotifyDownloader.git
-cd SpotifyDownloader
+git clone https://github.com/bruhMomentFixer/spotpsync-tool.git
+cd spotpsync-tool
 ```
 
 ### 2. Instala Python
@@ -51,31 +60,33 @@ Descarga e instala Python desde [python.org](https://www.python.org/downloads/).
 
 ### 3. Instala las dependencias
 ```bash
-pip install spotipy mutagen yt-dlp spotdl
+pip install -r requirements.txt
 ```
 
-### 4. Actualiza las librerías (opcional)
-Ejecuta la opción 5 del programa para actualizar spotdl y yt-dlp automáticamente.
+### 4. Actualiza las dependencias (opcional)
+Ejecuta la opción 5 del programa para actualizar `spotdl` y `yt-dlp` automáticamente.
 
 ## ⚙️ Configuración
 
 ### Credenciales de Spotify
-El programa requiere credenciales de Spotify para acceder a la API. **Se recomienda encarecidamente obtener tus propias credenciales** para evitar límites de uso y asegurar compatibilidad.
+El programa puede utilizar credenciales propias de Spotify Developer o las credenciales por defecto de spotdl. **Se recomienda encarecidamente obtener tus propias credenciales** para evitar límites de uso y asegurar compatibilidad.
 
 #### Cómo obtener tus credenciales:
 1. Ve a [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Crea una nueva aplicación.
 3. Copia el `Client ID` y `Client Secret`.
-4. Crea un archivo `spotify_client_data.txt` en la misma carpeta que `SDPro.py`:
+4. Crea un archivo `spotify_client_data.txt` en la misma carpeta que `spotpsync.py`:
    ```
    TU_CLIENT_ID_AQUI
    TU_CLIENT_SECRET_AQUI
    ```
 
+   **Importante**: no subas el archivo `spotify_client_data.txt` al repositorio. Añádelo al `.gitignore` para evitar publicar tus credenciales de Spotify Developer.
+
 #### Opciones de credenciales en el programa:
 Cuando ejecutes cualquier función que requiera Spotify, el programa te pedirá elegir:
 - **Opción 1**: Usar credenciales del archivo `spotify_client_data.txt` (recomendado)
-- **Opción 2**: Usar credenciales por defecto de spotdl (limitado, no recomendado)
+- **Opción 2**: Usar credenciales por defecto de `spotdl` (limitado, no recomendado)
 - **Opción 3**: Ingresar credenciales manualmente
 
 ### Configuración inicial
@@ -85,19 +96,19 @@ Ejecuta el programa y selecciona la opción de credenciales. El programa te guia
 
 ### Ejecutar el programa
 ```bash
-python SDPro.py
+python spotpsync.py
 ```
 
 ### Menú principal
 ```
 ==================================================
-🎵 SPOTIFY DOWNLOADER
+🎵 SpotPSync Tool
 ==================================================
-1. Descargar una canción individual
-2. Descargar múltiples canciones desde archivo
+1. Procesar una canción individual
+2. Procesar múltiples canciones desde archivo
 3. Exportar playlist a archivo
-4. Sincronizar playlist local con Spotify
-5. Comprobar y actualizar librerías
+4. Sincronizar carpeta local con playlist de Spotify
+5. Comprobar y actualizar dependencias
 6. Salir
 
 Elige una opción (1, 2, 3, 4, 5 o 6):
@@ -105,48 +116,48 @@ Elige una opción (1, 2, 3, 4, 5 o 6):
 
 ## 🎯 Ejemplos
 
-### 1. Descargar una canción individual
+### 1. Procesar una canción individual
 ```
 Elige una opción: 1
-Introduce la URL de la canción de Spotify: https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
+Introduce la URL de la canción de Spotify: https://open.spotify.com/track/<track_id>
 ```
-Resultado: Descarga "Blinding Lights" de The Weeknd en la carpeta ".\downloads" (crea una si no existe o crea una nueva ".\downloads0" si existe una con contenido).
+Resultado: procesa la URL indicada y almacena el archivo resultante en la carpeta `.\downloads`. (crea una si no existe o crea una nueva `.\downloads0` si existe una con contenido).
 
-### 2. Descargar múltiples canciones desde archivo
+### 2. Procesar múltiples canciones desde archivo
 ```
 Elige una opción: 2
 ```
-Resultado: Lee el archivo 'songs-to-download.txt' y descarga todas las canciones listadas, guardando en la carpeta ".\downloads".
+Resultado: lee el archivo `spotify-track-list.txt`, procesa las URLs listadas y almacena los archivos resultantes en la carpeta `.\downloads`.
 
 ### 3. Exportar playlist a archivo
 ```
 Elige una opción: 3
-Introduce la URL de la playlist: https://open.spotify.com/playlist/4JrjRdPrU8SPl7YzG9KGPQ
+Introduce la URL de la playlist: https://open.spotify.com/playlist/<playlist_id>
 ```
-Resultado: Crea automáticamente el archivo 'songs-to-download.txt' con todas las URLs de la playlist.
+Resultado: crea automáticamente el archivo `spotify-track-list.txt` con todas las URLs de la playlist.
 
-### 4. Sincronizar playlist local con Spotify
+### 4. Sincronizar carpeta local con playlist de Spotify
 ```
 Elige una opción: 4
 Introduce la URL de la playlist: https://open.spotify.com/playlist/4JrjRdPrU8SPl7YzG9KGPQ
 Introduce la ruta de la carpeta local: C:\Music\Chill EDM
 ```
-Resultado: Sincroniza la playlist, descarga faltantes y actualiza metadatos.
+Resultado: compara la playlist con la carpeta local, procesa las pistas faltantes y actualiza los metadatos ID3.
 
-### 5. Comprobar y actualizar librerías
+### 5. Comprobar y actualizar dependencias
 ```
 Elige una opción: 5
 ```
-Resultado: Actualiza spotdl y yt-dlp a las versiones más recientes.
+Resultado: actualiza `spotdl` y `yt-dlp` a las versiones más recientes.
 
 ## 🔍 Solución de Problemas
 
 ### Error de autenticación
 - Verifica que `spotify_client_data.txt` tenga las credenciales correctas.
-- Asegúrate de que la aplicación de Spotify esté en modo "Development".
+- Asegúrate de que la aplicación de Spotify Developer esté correctamente configurada y que las credenciales sean válidas.
 
-### Descargas fallidas
-- El programa usa spotdl primero, luego yt-dlp como respaldo.
+### Procesamiento fallido de pistas
+- El programa utiliza `spotdl` como método principal y `yt-dlp` como mecanismo de respaldo.
 - Si falla, verifica tu conexión a internet y que las URLs sean válidas.
 
 ### Problemas con metadatos
@@ -160,7 +171,7 @@ Resultado: Actualiza spotdl y yt-dlp a las versiones más recientes.
 ### Comandos comunes
 ```bash
 # Ver logs detallados (redirigir salida a archivo)
-python SDPro.py > log.txt
+python spotpsync.py > log.txt
 
 # El programa es interactivo y no requiere argumentos adicionales
 # Todas las configuraciones se hacen desde el menú
@@ -168,29 +179,18 @@ python SDPro.py > log.txt
 
 ## 🤝 Contribución
 
-¡Las contribuciones son bienvenidas! Para contribuir:
-
-1. Fork el proyecto.
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`).
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`).
-4. Push a la rama (`git push origin feature/AmazingFeature`).
-5. Abre un Pull Request.
-
-### Guías de contribución
-- Sigue el estilo de código PEP 8.
-- Agrega tests para nuevas funcionalidades.
-- Actualiza la documentación.
+Las sugerencias, informes de errores y propuestas de mejora son bienvenidas mediante Issues.
 
 ## 📄 Licencia
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto está licenciado bajo la PolyForm Noncommercial License 1.0.0.
+
+Puedes usar, copiar, modificar y compartir este software para fines personales, educativos y otros fines no comerciales.
+
+No se permite el uso comercial sin una licencia comercial separada. Para licencias comerciales, contacta con el autor a través del perfil de GitHub.
+
+Las dependencias de terceros se distribuyen bajo sus respectivas licencias.
 
 ---
 
-**⚠️ Nota importante**: Este programa es para uso personal y educativo. Respeta los derechos de autor y las leyes de tu país al descargar música. No promueve la piratería.
-
-**Disclaimer**: Todo el código de este proyecto ha sido generado utilizando inteligencia artificial. Se recomienda revisar y probar el código antes de usarlo en producción.
-
-¡Disfruta descargando tu música favorita! 🎶
-
-Si te gusta el proyecto, ¡dale una ⭐ en GitHub!
+**⚠️ Nota importante**: Este proyecto está destinado únicamente a uso personal, educativo y no comercial. Los usuarios son responsables de asegurarse de que el uso de esta herramienta cumple con la legislación aplicable, los términos de servicio de las plataformas utilizadas y la normativa sobre derechos de autor.
