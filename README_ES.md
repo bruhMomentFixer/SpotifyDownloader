@@ -3,6 +3,8 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
+🌐 Idioma: [English](README.md) | Español
+
 > Herramienta en Python para gestionar playlists de Spotify, sincronizar carpetas locales de música y mantener la consistencia de metadatos ID3.
 
 ## 📋 Tabla de Contenidos
