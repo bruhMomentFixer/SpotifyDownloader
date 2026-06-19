@@ -69,7 +69,7 @@ Ejecuta la opción 5 del programa para actualizar `spotdl` y `yt-dlp` automátic
 ## ⚙️ Configuración
 
 ### Credenciales de Spotify
-El programa puede utilizar credenciales propias de Spotify Developer o las credenciales por defecto de spotdl. **Se recomienda encarecidamente obtener tus propias credenciales** para evitar límites de uso y asegurar compatibilidad.
+El programa puede utilizar credenciales propias de Spotify Developer o las credenciales por defecto de `spotdl`. **Se recomienda utilizar credenciales propias** para evitar límites de uso y asegurar compatibilidad.
 
 #### Cómo obtener tus credenciales:
 1. Ve a [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
@@ -121,13 +121,13 @@ Elige una opción (1, 2, 3, 4, 5 o 6):
 Elige una opción: 1
 Introduce la URL de la canción de Spotify: https://open.spotify.com/track/<track_id>
 ```
-Resultado: procesa la URL indicada y almacena el archivo resultante en la carpeta `.\downloads`. (crea una si no existe o crea una nueva `.\downloads0` si existe una con contenido).
+Resultado: procesa la URL indicada y almacena el archivo resultante en la carpeta `./downloads`. (crea una si no existe o crea una nueva `./downloads0` si existe una con contenido).
 
 ### 2. Procesar múltiples canciones desde archivo
 ```
 Elige una opción: 2
 ```
-Resultado: lee el archivo `spotify-track-list.txt`, procesa las URLs listadas y almacena los archivos resultantes en la carpeta `.\downloads`.
+Resultado: lee el archivo `spotify-track-list.txt`, procesa las URLs listadas y almacena los archivos resultantes en la carpeta `./downloads`.
 
 ### 3. Exportar playlist a archivo
 ```
@@ -139,7 +139,7 @@ Resultado: crea automáticamente el archivo `spotify-track-list.txt` con todas l
 ### 4. Sincronizar carpeta local con playlist de Spotify
 ```
 Elige una opción: 4
-Introduce la URL de la playlist: https://open.spotify.com/playlist/4JrjRdPrU8SPl7YzG9KGPQ
+Introduce la URL de la playlist: https://open.spotify.com/playlist/<playlist_id>
 Introduce la ruta de la carpeta local: C:\Music\Chill EDM
 ```
 Resultado: compara la playlist con la carpeta local, procesa las pistas faltantes y actualiza los metadatos ID3.
@@ -162,7 +162,7 @@ Resultado: actualiza `spotdl` y `yt-dlp` a las versiones más recientes.
 
 ### Problemas con metadatos
 - Asegúrate de que los archivos MP3 no estén bloqueados.
-- Usa un editor de metadatos como Mp3tag para verificar.
+- Usa un editor de metadatos como Mp3tag o una herramienta equivalente para verificar.
 
 ### Playlist no sincroniza correctamente
 - Verifica que la carpeta local tenga permisos de escritura.
