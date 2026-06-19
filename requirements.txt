@@ -1,0 +1,4 @@
+spotipy
+mutagen
+yt-dlp
+spotdl
