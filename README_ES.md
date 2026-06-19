@@ -122,7 +122,20 @@ Después de seleccionar el idioma, los menús principales, mensajes de estado e 
 python spotpsync.py
 ```
 
-Al ejecutar el programa, primero se solicita seleccionar el idioma de la interfaz. Después se muestra el menú principal.
+También puedes iniciar el programa directamente en un idioma concreto:
+
+```bash
+python spotpsync.py --lang es
+python spotpsync.py --lang en
+```
+
+Opciones de idioma disponibles:
+
+* `--lang es`: interfaz en español
+* `--lang en`: interfaz en inglés
+
+Si no se proporciona ningún parámetro de idioma, el programa solicitará seleccionar el idioma de la interfaz al iniciar.
+
 
 ### Menú principal
 ```
