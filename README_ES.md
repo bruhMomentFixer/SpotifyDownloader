@@ -136,7 +136,6 @@ Opciones de idioma disponibles:
 
 Si no se proporciona ningún parámetro de idioma, el programa solicitará seleccionar el idioma de la interfaz al iniciar.
 
-
 ### Menú principal
 ```
 ==================================================
