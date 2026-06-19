@@ -1451,9 +1451,9 @@ def create_track_list_template_file() -> None:
 # Place one Spotify track URL per line.
 # Lines starting with # are comments.
 
-https://open.spotify.com/track/4vIQ62JoGRy7tDy24hiqrF
-https://open.spotify.com/track/6T7FX1XaXoh1oGpt4QrP8l
-https://open.spotify.com/track/0B7c7s1qumVfKVSJhQbq1L
+# https://open.spotify.com/track/<track_id>
+# https://open.spotify.com/track/<track_id>
+# https://open.spotify.com/track/<track_id>
 
 # More tracks...
 """
@@ -1462,9 +1462,9 @@ https://open.spotify.com/track/0B7c7s1qumVfKVSJhQbq1L
 # Coloca una URL de Spotify por línea.
 # Las líneas que comienzan con # son comentarios.
 
-https://open.spotify.com/track/4vIQ62JoGRy7tDy24hiqrF
-https://open.spotify.com/track/6T7FX1XaXoh1oGpt4QrP8l
-https://open.spotify.com/track/0B7c7s1qumVfKVSJhQbq1L
+# https://open.spotify.com/track/<track_id>
+# https://open.spotify.com/track/<track_id>
+# https://open.spotify.com/track/<track_id>
 
 # Más canciones...
 """
