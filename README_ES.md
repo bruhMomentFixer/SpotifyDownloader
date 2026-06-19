@@ -7,6 +7,8 @@
 
 > Herramienta en Python para gestionar playlists de Spotify, sincronizar carpetas locales de música y mantener la consistencia de metadatos ID3.
 
+> El programa soporta español e inglés. Puedes seleccionar el idioma de la interfaz al iniciar la herramienta.
+
 ## 📋 Tabla de Contenidos
 
 - [✨ Características](#-características)
@@ -14,6 +16,7 @@
 - [🧠 Aspectos técnicos](#-aspectos-técnicos)
 - [🚀 Instalación](#-instalación)
 - [⚙️ Configuración](#️-configuración)
+- [🌐 Selección de idioma](#-selección-de-idioma)
 - [📖 Uso](#-uso)
 - [🎯 Ejemplos](#-ejemplos)
 - [🔍 Solución de Problemas](#-solución-de-problemas)
@@ -94,12 +97,32 @@ Cuando ejecutes cualquier función que requiera Spotify, el programa te pedirá 
 ### Configuración inicial
 Ejecuta el programa y selecciona la opción de credenciales. El programa te guiará.
 
+## 🌐 Selección de idioma
+
+SpotPSync Tool soporta español e inglés.
+
+Al iniciar el programa, se solicita elegir el idioma de la interfaz:
+
+```text
+==================================================
+🌐 Language / Idioma
+==================================================
+1. Español
+2. English
+
+Choose language / Elige idioma (1 or 2):
+```
+
+Después de seleccionar el idioma, los menús principales, mensajes de estado e indicaciones se mostrarán en el idioma elegido.
+
 ## 📖 Uso
 
 ### Ejecutar el programa
 ```bash
 python spotpsync.py
 ```
+
+Al ejecutar el programa, primero se solicita seleccionar el idioma de la interfaz. Después se muestra el menú principal.
 
 ### Menú principal
 ```
