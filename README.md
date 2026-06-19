@@ -187,7 +187,7 @@ Este proyecto está licenciado bajo la PolyForm Noncommercial License 1.0.0.
 
 Puedes usar, copiar, modificar y compartir este software para fines personales, educativos y otros fines no comerciales.
 
-No se permite el uso comercial sin una licencia comercial separada. Para licencias comerciales, contacta con el autor a través del perfil de GitHub.
+No se permite el uso comercial sin una licencia comercial separada. Para licencias comerciales, contacta con el autor a través del perfil de GitHub asociado a este repositorio.
 
 Las dependencias de terceros se distribuyen bajo sus respectivas licencias.
 
