@@ -135,7 +135,18 @@ After selecting the language, all main menus, prompts, and status messages will 
 python spotpsync.py
 ```
 
-When running the program, you will first be asked to select the interface language. After that, the main menu will be displayed.
+You can also start the program directly in a specific language:
+```bash
+python spotpsync.py --lang en
+python spotpsync.py --lang es
+```
+
+Available language options:
+
+`--lang en`: English interface
+`--lang es`: Spanish interface
+
+If no language parameter is provided, the program will ask you to select the interface language at startup.
 
 ### Main Menu
 
