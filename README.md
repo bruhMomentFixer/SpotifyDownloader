@@ -143,8 +143,8 @@ python spotpsync.py --lang es
 
 Available language options:
 
-`--lang en`: English interface
-`--lang es`: Spanish interface
+* `--lang en`: English interface
+* `--lang es`: Spanish interface
 
 If no language parameter is provided, the program will ask you to select the interface language at startup.
 
